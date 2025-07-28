@@ -1,0 +1,60 @@
+h1 {
+    text-align: center;
+}
+
+.container {
+    margin: 0 auto;
+    padding: 60px 20%;
+}
+
+figure {
+    text-align: center;
+}
+
+img {
+    border-radius: 5%;
+    display: inline-block;
+}
+
+.center {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    width: 50%;
+}
+
+.table-text > tbody > tr > td, .table-text > tbody > tr, .table-text {
+    border: 1px solid #efe0bc;
+    border-collapse: collapse;
+    padding: 0.3em;
+}
+
+.table-bad {
+    background-color: #700606;
+}
+
+.table-ok {
+    background-color: #949200;
+}
+
+.table-mix {
+    background-color: #850094;
+}
+
+.table-good {
+    background-color: #237505;
+}
+
+a {
+    color: #f0c561;
+}
+
+body {
+    background-color: #1d1e31;
+    color: #efe0bc;
+    font-family: "Montserrat", sans-serif;
+}
+
+footer {
+    text-align: center;
+}

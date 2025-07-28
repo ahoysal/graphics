@@ -1,0 +1,539 @@
+<html>
+
+<head>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=default'></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../style.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Rasterization</h1>
+        <div style="text-align: center;">(CS184 Summer 2025 Homework 1 Write-Up)</div><br>
+        <div style="text-align: center;"> ~ Aagrim Hoysal ~</div>
+        <div style="text-align: center;">
+            <a href="https://ahoysal.github.io/cs184/rasterization">Loop Link</a> |
+            <a href="https://github.com/cal-cs184/hw-rasterizer-a-raster-master" target="_blank">GitHub Repo</a>
+        </div>
+
+        <!--
+		We've already added one heading per task, to make your write-up as navigable when grading. Please fit your write-up within these sections!
+		-->
+
+        <h2>Overview</h2>
+        This is documentation from building a simple rasterizer for images, starting from drawing triangles to the
+        screen to UV mapping and texturing with various anti-aliasing methods. Before this, my digital art experience
+        had mostly been 2D pixel art, so this project has helped me understand why I click "nearest" instead of "linear"
+        when making pixel art. Jokes aside, it explained a lot of the interesting intricacies of how images are
+        rendered, and what techniques are used to remove artifacts from distortion– whether that distortion is scaling,
+        rotating, translating, sheering, or even just taking a continuous signal and trying to fit it on a discrete
+        finite screen.
+
+        <h2>Drawing Single-Color Triangles (Task 1)</h2>
+        To rasterize triangles, first find the bounding box by calculating the minimum and maximum X and Y coordinates.
+        This gives a box of candidate pixels to check. Round down on mins and round up on maxes to ensure that all
+        possible pixels are accounted for, since we will sample at (x+.5, y+.5). We can also bound the minimum and
+        maximum by the screen coordinates now
+        so that we don't spend time on checking pixels out of the bounds of the screen, and we will never try to write
+        to invalid coordinates.
+        <figure style="float: inline-end;">
+            <img src="images/part1.png" width="400px" />
+            <figcaption>Screenshot of rendering of <i>basic/test4.svg</i></figcaption>
+        </figure>
+        <br><br>
+        Next, iterate over the bounding box to check if (pixel position) + (0.5, 0.5) are in the triangle. We check this
+        by running three dot products on the sampling test point \(T\);
+        <ul>
+            <li>\(\vec{p_0p_1} \cdot R_{CCW}(\vec{p_0T})\)</li>
+            <li>\(\vec{p_1p_2} \cdot R_{CCW}(\vec{p_1T})\)</li>
+            <li>\(\vec{p_2p_0} \cdot R_{CCW}(\vec{p_2T})\)</li>
+        </ul>
+        \[R_{CCW} = \text{90° CCW rotation} = \begin{bmatrix} 0 & 1 \\ -1 & 0 \end{bmatrix}\]
+        For each dot product, we check if their sign is the same (since we don't care about winding order). If the signs
+        don't match (and the sign isn't equal to 0) then the point is not in the triangle. If all three match or are
+        zero, then we render that pixel as inside the triangle by filling it in.
+        <br><br>
+        Initially, I tried creating Vector2's and doing dot products through CGL– this ended up being slower than
+        writing out the dot products by hand, as rotating the vectors took a while. Factoring out constant expressions
+        in the dot product outside the loop actually decreased performance, so I left in the full dot product
+        expression. Factoring out a <code>sample_triangle()</code> function reduced computation by 10-15 cycles,
+        however.
+
+        <h2>Antialiasing by Supersampling (Task 2)</h2>
+        Supersampling consisted of enlarging the sampling buffer, sampling at more points for each pixel, and averaging
+        those samples. I enlarged the sampling buffer proportionally to the sampling rate so that each pixel had
+        additional space for the additional samples. Then, when rasterizing each pixel, instead of writing only one
+        value to the buffer, I wrote the sampling rate number of samples. To do this, I picked evenly spaced sub-pixel
+        points in a \(\sqrt{sampling~rate} \times \sqrt{sampling~rate}\) grid within the pixel to sample, and put those
+        in the buffer. Additionally, I formatted the buffer so that all samples corresponding to one pixel were
+        contiguous; this allows for different sampling patterns, sampling rates that aren't perfect squares, and
+        hopefully more cache hits, but doesn't lend itself to the "high res render then downsample" intuition.
+        <br><br>
+        Averaging the pixels was just a matter of, for each pixel of the screen buffer, taking the associated samples
+        and doing a uniform weighted average of all the pixel colors, then pushing that to the screen buffer as the
+        pixel's value.
+        <br><br>
+        The supersampling helps to reduce jaggies and moire patterns by providing intermediate values instead of just on
+        or off for each pixel. In effect, high frequency data is filtered out by the multiple samples, which should
+        average out the high frequencies past the nyquist within the pixel, so that it isn't aliased as low frequency
+        data, i.e a different shape with more jagged edges.
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 1em; ">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/part2at1.png" width="300px" />
+                        <figcaption>Sampling rate of 1. Notice the jaggies.</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/part2at4.png" width="300px" />
+                        <figcaption>Sampling rate of 4. Notice the four levels of redness.</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/part2at9.png" width="300px" />
+                        <figcaption>Sampling rate of 9. Notice the smoother gradient.</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/part2at16.png" width="300px" />
+                        <figcaption>Sampling rate of 16. Notice the diminishing returns.</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <h3><s>Random</s> <i>Low-discrepancy</i> aside: Other supersampling methods (Task 2 EC)</h3>
+
+        Instead of supersampling in a rigid grid, why not use another pattern? Grids might miss intersections; what if
+        a triangle passes right in between because it runs straight up and down, right past all the grid points?
+        Low-discrepancy sampling helps solve this. Low-discrepancy patterns have some properties of random numbers, but
+        guarantee that there are an equal distribution of points in every range as it goes to infinity. If we use a
+        low-discrepancy pattern in \(\mathbb{R}^2\), we can sample in a quasirandom way while still sampling evenly!
+        <br><br>
+        One low-discrepancy way to find points in a unit square that we can use to choose our samples is <a
+            href="https://lavalle.pl/planning/node210.html">the Halton Sequence</a>. By flipping the digits in \([1,
+        k]\) across the decimal point in \(n\) coprime base representations, we can get \(k\) points in
+        \(\mathbb{R}^n\) that are distributed in a low-discrepancy way. We can precompute these with coprimes 2 and 3,
+        then use the sampling frequency to determine how many points from the Halton Sequence we take, then sample with
+        that pattern. This avoids some artifacts from potential misses due to the regularity of grids.
+
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 1em; ">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/ecnh4.png" width="300px" />
+                        <figcaption>Grid sampling at 4 samples/px.<br>Notice the disconnect.</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/ecnh16.png" width="300px" />
+                        <figcaption>Grid sampling at 16 samples/px.<br>Notice the disconnect.</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/ech4.png" width="300px" />
+                        <figcaption>Using halton to sample at 4 samples/px.<br>Notice how it's much more continuous.</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/ech16.png" width="300px" />
+                        <figcaption>Using halton to sample at 16 samples/px.<br>Notice how it's continuous.</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+
+        <h2>Transforms (Task 3)</h2>
+        Transforms are quite simple. We use homogenous coordinates (3x1) to be able to translate points, with a 1 in the
+        lower right corner to signify a point and 0 for a vector. The matrix for translation looks like
+
+        <figure style="float: inline-end;">
+            <img src="images/part3.png" width="300px" />
+            <figcaption>It really suits them!</figcaption>
+        </figure>
+
+        \[
+        \begin{bmatrix}
+        1 & 0 & t_x \\
+        0 & 1 & t_y \\
+        0 & 0 & 1
+        \end{bmatrix}
+        \]
+        The result of a matrix multiplication of a column vector that is a point (i.e 1 at the bottom) will be the same
+        as the original column vector, plus \(t_x\) in the x axis
+        and \(t_y\) in the y axis because the last value in the column vector is 1. For a vector, a translation should
+        have no effect; and in fact it doesn't, because
+        the final row being 0 cancels any translations that would have happened. Similarly, the matrix for scaling is
+        \[
+        \begin{bmatrix}
+        s_x & 0 & 0 \\
+        0 & s_y & 0 \\
+        0 & 0 & 1
+        \end{bmatrix}
+        \]
+        This only multiplies the x and y components of the column vector by \(s_x\) and \(s_y\). The matrix for rotation
+        can be derived from rotating the basis vectors around,
+        and can be represented as such:
+        \[
+        \begin{bmatrix}
+        cos(rot) & sin(rot) & 0 \\
+        sin(rot) & -cos(rot) & 0 \\
+        0 & 0 & 1
+        \end{bmatrix}
+        \]
+        Many images can be derived from translating, rotating, and scaling basic shapes. To demonstrate this, I have
+        made a robot that is tidying their tie, composed of triangles and transformations on them, rendered in the same
+        rendering engine as the rest of this assignment.
+
+
+        <h2>Barycentric coordinates (Task 4)</h2>
+        <figure style="float: inline-end;">
+            <img src="images/part4circle.png" width="300px">
+            <figcaption>Screenshot of rendering of <i>basic/test7.svg</i></figcaption>
+            <br>
+            <img src="images/part4triangle.png" width="300px">
+            <figcaption>Example of barycentric coordinates <br> to interpolate colors at vertexes.<br>Notice the smooth
+                gradient.</figcaption>
+        </figure>
+        Barycentric coordinates are a way to convert cartesian coordinates into a linear combination of the three points
+        of the triangle, while maintaining that the sum of three weightings equal 1. More mathematically, they provide
+        \(\alpha, \beta, \gamma\) such that
+        \[
+        \begin{equation}
+        \begin{cases}
+        \alpha p_0 + \beta p_1 + \gamma p_2 = T \\
+        \alpha + \beta + \gamma = 1
+        \end{cases}
+        \end{equation}
+        \equiv
+        \begin{bmatrix}
+        x_0 & x_1 & x_2 \\
+        y_0 & y_1 & y_2 \\
+        1 & 1 & 1
+        \end{bmatrix}
+        \begin{bmatrix}
+        \alpha \\ \beta \\ \gamma
+        \end{bmatrix}
+        =
+        \begin{bmatrix}
+        T_x \\ T_y \\ 1
+        \end{bmatrix}
+        \]
+        We can prove that when \(\alpha, \beta, \gamma \ge 0\), then T lies within or on the triangle. The barycentric
+        coordinates are a weighted average of the three points, so without loss of generality between which two of three
+        points are chosen, pick two points on the triangle. The points that exist on the line connecting the two are
+        some weighted average of both points, lets say \(\alpha\) and \(\beta\). Then \(\alpha + \beta = 1\), basically
+        an interpolation between the first and second point without any influence of the third point. If \(\gamma > 0\),
+        that point moves toward the third point; then if \(\gamma \lt 0\), the point is displaced away from the third
+        point, and is on the "wrong side" of the line connecting the first two points; it is definitely not in the
+        triangle. By symmetry, if the point is on the "wrong side" of any of the three combinations, it is not in the
+        triangle, and conversely if it is on the "right side" of all of the lines, it is inside the triangle.
+        <br><br>
+        Because barycentric coordinates are defined as a weighted average of the three points where all weights are
+        positive inside the triangle, we can easily use the coordinates to map things onto the triangle, such as
+        linearly interpolating colors or lighting effects defined only at vertexes across the whole triangle at every
+        pixel. It can also be used for UV mapping of textures onto a model.
+        <br><br>
+        The implementation of interpolating vertex colors was not difficult. I reduced the three equations to two by
+        substituting \(\gamma = 1 - \alpha - \beta\), which yields
+        \[
+        \begin{bmatrix}
+        x_0 - x_2 & x_1 - x_2 \\
+        y_0 - y_2 & y_1 - y_2
+        \end{bmatrix}
+        \begin{bmatrix}
+        \alpha \\ \beta
+        \end{bmatrix}
+        =
+        \begin{bmatrix}
+        T_x - x_2 \\ T_y - y_2
+        \end{bmatrix}
+        \equiv
+        \begin{bmatrix}
+        y_1 - y_2 & -(x_1 - x_2) \\
+        -(y_0 - y_2) & x_0 - x_2
+        \end{bmatrix}
+        \begin{bmatrix}
+        T_x - x_2 \\ T_y - y_2
+        \end{bmatrix}
+        =
+        \begin{bmatrix}
+        \alpha \\ \beta
+        \end{bmatrix}
+        \]
+        The second equation is found by inverting the matrix. This gives us values of \(\alpha\) and \(\beta\) directly,
+        and with \(\gamma = 1 - \alpha - \beta\) gives \(\gamma\). Using the same bounding box technique, we can test if
+        each point is inside the triangle by checking \(\alpha, \beta, \gamma \ge 0\) and then interpolate by weighting
+        each vertex color's contribution with respect to their associated point's coefficient.
+
+
+        <h2 id="part5">"Pixel sampling" for texture mapping (Task 5)</h2>
+
+        Texture mapping takes a triangle in screenspace, a corresponding point in texture space for each triangle
+        vertex, and the texture itself. It then spits out, for each pixel in the triangle, a sampled point from texture
+        space, interpolating such that the screenspace image looks close to if the corresponding texture triangle was
+        stretched to fit the screenspace triangle.
+        <br><br>
+        Using barycentric coordinates, we can interpolate the coordinates in texture space ("UVs") based on how close
+        they are to each of the screenspace vertexes. However, because pixels will not match up with texels (texture
+        space pixels), we need to be able to sample the texture at points and get back one color value– pixel sampling.
+        Two different pixel sampling methods implemented here are nearest and bilinear. Nearest just takes the closest
+        texel and assigns it to the screen space pixel. Bilinear takes the square surrounding the UV and interpolates
+        between them all– first finding out the color interpolated between the left side depending on how close the UV
+        is to each vertically, then the same for the right two pixels, and finally between the left interpolated color
+        and right interpolated color based on the percentage of the way the UV is between the left and right.
+        <br>
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 1em; ">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/part5n1.png" width="300px" />
+                        <figcaption>Nearest @ 1 sample/pixel.<br></figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/part5b1.png" width="300px" />
+                        <figcaption>Bilinear @ 1 sample/pixel.<br></figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/part5n16.png" width="300px" />
+                        <figcaption>Nearest @ 16 samples/pixel.<br></figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/part5b16.png" width="300px" />
+                        <figcaption>Bilinear @ 16 samples/pixel.<br></figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        The above table contains a few different settings. Nearest @ 1 sample/pixel samples high frequency noise a lot,
+        resulting in lots of jaggies; there aren't enough pixels to discern all the detail inside the bell tower, so we
+        get snippets of the high frequency noise that alias as other shapes. Bilinear sampling helps allieviate this a
+        little through looking at two different points. This causes some high frequency noise (contained in \(\le\) one
+        texel) to get averaged out, but even then not all pixels have contribution to the image because of how the image
+        is distorted. Nearest @ 16 samples/pixel samples a lot more pixels and averages them out, in effect performing a
+        more coarse version of bilinear filtering by not considering interpolation based on location but instead flat
+        weighting a spattering of samples within the triangle, eliminating the most prominent jaggies. Bilinear @ 16
+        samples/pixel is the most extreme version of this, sampling many texels per pixel while also interpolating
+        between them, getting rid of a lot of the low frequency noise that might have been aliased as something else.
+        <br><br>
+        Generally, there will be a large difference between nearest and bilinear when the sampled texture region is much
+        larger than the region of pixels. This causes the texture to be sampled at a low frequency when there may be a
+        lot of high frequency data, causing moire patterns and jaggies from aliasing. Nearest will perform badly on such
+        textures because it will pick up those higher frequencies, while bilinear will perform better as it considers
+        the neighborhood and will interpolate to get rid of some of the artifacts.
+
+
+        <h2>"Level Sampling" with mipmaps for texture mapping (Task 6)</h2>
+        Mipmaps are a way to precompute minified textures, making it faster than supersampling. This is done by level
+        sampling, i.e computing how close together pixel samples are and choosing an appropriately (precomputed)
+        downsampled texture to make sure the highest frequency is below the nyquist frequency. With this, you can choose
+        either to always sample at full resolution (not using mipmaps at all), sample the closest mipmap level, or
+        interpolate between the two closest mipmap levels.
+        <h3 id="mipmap">Mipmap implementation</h3>
+        Implementing mipmapping requires a) precomputing the downsampled texture levels, b) figuring out which
+        downsampling level is needed, and c) potentially interpolating samples from two different mipmap levels.
+        Precomputing downsampled textures consists of taking each texture and halving the resolution in each direction
+        so the next image is one fourth the size. This is done recursively until the downsampled image is only one
+        pixel, and all the images are stored alongside the original texture. The original image is stored as level 0,
+        the one fourth sized image as level 1, one sixteenth as level 2, etc.
+        <br><br>
+        When figuring out the downsampling level, we approximate the distance between samples by checking where the
+        pixels below and to the right of the original would sample in texture space. The distance in texture space is
+        then used as an approximation of distance. Intuitively, if the next pixel sample would be two texels away on the
+        original texture, we should use the level 1 texture, as our samples would "skip" one texel in level 0 (therefore
+        possibly aliasing) but hit all the texels in level 1 which have prefiltered the aliasing frequencies out.
+        Similarly if the next sample was 4 texels away, level 2 would be most appropriate. Through this we can derive
+        that for sample \(s\), the corresponding \(L\) is
+        \[
+        L = \log_2(
+        \max(
+        \text{dist}(\text{uv}(s), \text{uv}(s_{x+1})), ~
+        \text{dist}(\text{uv}(s), \text{uv}(s_{y+1}))
+        )
+        )
+        \]
+        where the function \(\text{uv}\) returns the level 0 texel coordinates of the interpolated UV at the sampled
+        pixel. This also needs to be clamped between 0 and the max mipmap level.
+        <br><br>
+        Finally, we can sample from the desired mipmap level. We can either just round the level to the nearest, or do
+        an interpolation <i>between</i> the two closest levels weighted by proximity. This is done by simply sampling
+        the integer levels above and below the floating point computed level using either nearest or bilinear as
+        described in <a href="#part5">part 5</a>, then interpolating the two colors based on the fractional component.
+        <h3>Sampling tradeoffs</h3>
+        The below table compares each sampling technique individually to nearest pixel, no mipmaps, no supersampling.
+        <br><br>
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table class="table-text" style="width: 100%;">
+                <tr style="align-items: center; text-align: center;">
+                    <td></td>
+                    <td>Supersampling</td>
+                    <td>Pixel sampling (bilinear)</td>
+                    <td>Level sampling</td>
+                </tr>
+                <tr>
+                    <td>Compute</td>
+                    <td class="table-bad">Quite costly, proportional to the number of samples</td>
+                    <td class="table-ok">Less costly, 4x samples for each corner and three lerps</td>
+                    <td class="table-good">Inexpensive, 1x lookup (2x if linear levels)</td>
+                </tr>
+                <tr>
+                    <td>Memory</td>
+                    <td class="table-bad">Sample buffer size grows proportional to number of samples</td>
+                    <td class="table-good">Almost no extra space needed</td>
+                    <td class="table-ok">Every texture takes x4/3 the space</td>
+                </tr>
+                <tr>
+                    <td>Antialias effectiveness</td>
+                    <td class="table-good">Very effective</td>
+                    <td class="table-mix">Helps most with magnification, more limited with minification</td>
+                    <td class="table-mix">Helps most with minification, little to no help with magnification</td>
+                </tr>
+            </table>
+        </div>
+        <br>
+        <h3>And finally... a cross section of the final product.</h3>
+
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 1em; ">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/part6l0pn.png" width="300px" />
+                        <figcaption>Level 0<br>Nearest texture sample</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/part6l0pl.png" width="300px" />
+                        <figcaption>Level 0<br>Bilinear texture sample</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/part6lnpn.png" width="300px" />
+                        <figcaption>Nearest level<br>Nearest texture sample</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/part6lnpl.png" width="300px" />
+                        <figcaption>Nearest level<br>Bilinear texture sample</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <h3>A little extra: Anisotropic filtering (Task 6 EC)</h3>
+
+        Anisotropic filtering tries to solve the same problems as mipmaps, but with seperate filtering mechanisms that
+        take into account the change in UV horizontally and vertically separately. I implemented an anisotropic
+        filtering system through summed area tables, which allows for efficient area integration of arbitrary areas by
+        precomputing the sum of the lower rectangle bounded by (0,0) and all points in the image. This can then be used
+        by subtracting the sum of the corners on the main diagonal (low x low y and high x high y) from the secondary
+        diagonal's points. Then by dividing by the area, we get the average value on the rectangle. If we do this for
+        the red, green, and blue channels, we get a rectangular filter of dynamic size for a constant four samples!
+        <br><br>
+        Now all we need is to find the size of the rectangular filter per pixel. We can then use the same approximation
+        of how stretched the UV is based on where the UV of two neighboring pixels end up, used <a
+            href="#mipmap">earlier</a>. Then we apply the following steps, assuming \(UV_{x+1}\) is the vector from the
+        original UV to the UV corresponding to pixel (x+1, y), and similarly for \(UV_{y+1}\):
+        <ol>
+            <li>Calculate the area of the parallelogram with edges \(UV_{x+1}\) and \(UV_{y+1}\) by computing the cross
+                product. This will let us figure out the "true" area that is getting sampled per pixel in texture space.
+            </li>
+            <li>Find the bounding box size of \(UV_{x+1}\) and \(UV_{y+1}\) with axis aligned sides.
+                Because we must perform all our operations axis aligned, this transforms our skewed UVs into something
+                we can work with on the texel level.</li>
+            <li>Scale the bounding box so it has the same area as the "true" area of the original parallelogram. An easy
+                way to do this is, for bounding box of side length \((u, v)\) and a "true" area \(A\), find \(m\) such
+                that \((m\cdot u)\cdot (m\cdot v) = A\), and set \((u,v) := m\cdot (u,v)\). This makes sure we are
+                filtering the same area
+                we would have if we had an axis aligned \(UV_{x+1}\) and \(UV_{y+1}\) originally, and thus antialias the
+                same (since the sampling rate is the same regardless of skew).</li>
+            <li>Center the bounding box on the original \(UV\) and calculate the summed area using the table with a
+                minimum size of a one pixel wide bounding box. Divide by area to get the average color in that area.
+            </li>
+        </ol>
+        This gets you pretty good results; its about halfway between bilinear and trilinear in terms of quality most of
+        the time, for around the cost of a bilinear.
+        <br>
+
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 1em; ">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/ecnearr.png" width="300px" />
+                        <figcaption>Level 0<br>Nearest texture sample<br>~3400 cycles</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/ecbii.png" width="300px" />
+                        <figcaption>Level 0<br>Bilinear texture sample<br>~5500 cycles</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/ectrii.png" width="300px" />
+                        <figcaption>Trilinear sampling<br>~12000 cycles</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/ecsatt.png" width="300px" />
+                        <figcaption>Anisotropic sampling<br>~5900 cycles</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+
+        <!--
+        <h2>(Optional) Task 7: Extra Credit - Draw Something Creative!</h2>
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et
+        dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
+        ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat
+        nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit
+        anim id est laborum.
+
+        <h2>Additional Notes (please remove)</h2>
+        <ul>
+            <li>You can also add code if you'd like as so: <code>code code code</code></li>
+            <li>If you'd like to add math equations,
+                <ul>
+                    <li>You can write inline equations like so: \( a^2 + b^2 = c^2 \)</li>
+                    <li>You can write display equations like so: \[ a^2 + b^2 = c^2 \]</li>
+                </ul>
+            </li>
+        </ul>
+        <p>Here is an example 2x2 gridlike structure using an HTML table. Each <b>tr</b> is a row and each <b>td</b>
+            is a column in that row. You might find this useful for framing and showing your result images in an
+            organized fashion.</p>
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: collapse;">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="lion.jpg" width="400px" />
+                        <figcaption>Caption goes here.</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="lion.jpg" width="400px" />
+                        <figcaption>Caption goes here.</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="lion.jpg" width="400px" />
+                        <figcaption>Caption goes here.</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="lion.jpg" width="400px" />
+                        <figcaption>Caption goes here.</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+    -->
+    
+    <footer>
+        Webpage based off <a href="https://github.com/cal-cs184/hw-webpage" target="_blank">CS 184 homework write up
+            template</a>
+    </footer>
+</body>
+
+</html>

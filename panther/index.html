@@ -1,0 +1,292 @@
+<html>
+
+<head>
+	<script src='https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=default'></script>
+	<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+		rel="stylesheet">
+	<link rel="stylesheet" href="../style.css">
+</head>
+
+<body>
+	<div class="container">
+		<h1>Panther</h1>
+		<div style="text-align: center;">(CS184 Summer 2025 Homework 3 Write-Up)</div><br>
+		<div style="text-align: center;">~ Aagrim Hoysal ~</div>
+		<div style="text-align: center;">
+			<a href="https://ahoysal.github.io/cs184/panther">Loop Link</a> |
+			<a href="https://github.com/cal-cs184/hw-pathtracer-updated-panther" target="_blank">GitHub Repo</a>
+		</div>
+
+		<!--
+		We've already added one heading per part, to make your write-up as navigable when grading. Please fit your write-up within these sections!
+		-->
+
+		<h2>Overview</h2>
+		WIP
+
+		<h2>Ray Generation and Scene Intersection (Part 1)</h2>
+		<h3>From Pixel to World: Generating Rays</h3>
+		<figure style="float: inline-end;">
+			<img src="images/spheresNormals.png" width="300px">
+			<figcaption>Spheres rendered by normal</figcaption>
+			<br>
+			<img src="images/dragonNormals.png" width="300px">
+			<figcaption>Dragon rendered by normal</figcaption>
+			<br>
+			<img src="images/bunnyNormals.png" width="300px">
+			<figcaption>Bunny rendered by normal</figcaption>
+		</figure>
+		The basics of a path tracer are sending out rays and finding out what they hit. Thus, we need to find a way to
+		generate rays from the camera in the direction of each pixel on the screen. Since we start with an \((x, y)\)
+		coordinate in terms of pixels, we can make the rendering resolution agnostic by converting the pixel coordinate
+		into a normalized image space with \((0, 0)\) being the bottom left of the image and \((1,1)\) being the top
+		right by dividing by pixel by the screen resolution. By normalizing the image space, we can then convert from
+		image space into camera space through shifting and scaling the \([0, 1)\) normalized image space range on both
+		the x and y axes to \([-\tan(\frac{\text{fov}}{2}), \tan(\frac{\text{fov}}{2}))\), with a separate horizontal
+		and vertical \(\text{fov}\) used on each axis. In addition, since image space is in 2D and camera space is in
+		3D, we add a standard -1 for the Z axis, since by convention all points on the image plane in camera space are
+		on \(z = -1\).
+		<br><br>
+		This coordinate directly gives us the direction of the ray, since it is at the location of the pixel coordinate
+		on the image in camera space and the camera (and by extension the origin of the ray) is at \(0, 0\) in camera
+		space. The vector from the camera to our pixel's transformed coordinates is then the transformed value minus the
+		origin, which is just the transformed value. Finally, because we know the ray originates at the camera, all we
+		need to do to convert from the ray in camera space to world space is simply apply the rotation matrix of the
+		camera to rotate the ray in conjunction with the camera. Since vectors (as opposed to points) aren't affected by
+		translations, we don't need to worry about translations or homogenous coordinates, and we can just apply the
+		rotation matrix. The transformed vector now gives us a vector pointing in the direction from the camera origin
+		to the pixel's coordinates on the image plane in world space. This vector normalized, along with the camera's
+		position in world space serving as the ray's origin, defines a ray going through a specified pixel in world
+		space. We can also add some randomness by peturbing the ray by a random amount between \([0,1)\)in the \(x\) and
+		\(y\) directions while in pixel space to sample different directions within the same pixel.
+		<br><br>
+		<h3>Yielding for triangles</h3>
+		<figure style="float: inline-end;">
+			<img src="images/yield.png" width="200px">
+			<figcaption>Rays must yield to triangles!</figcaption>
+		</figure>
+		If we can find where rays and objects intersect, we can figure out what rays hit. For simplicity, I only
+		implemented triangle-ray intersections and sphere-ray intersections. Triangle ray intersections are easily found
+		by using the barycentric definition of a plane by defining all points on a plane as the weighted average of the
+		three vertices of a triangle, where all weights add up to one (see <a
+			href="https://ahoysal.github.io/cs184/rasterization/#part4">earlier explanation of barycentric
+			coordinates</a>). By substituting the equation for all points on a ray (defined as \(O_{rigin} +
+		D_{irection}t\) for \(t \ge 0\)) as a point, we can solve for the ray and plane's intersection.
+		\[
+		O - v_0 = \beta (v_1 - v_0) + \gamma (v_2 - v_0) - Dt
+		\equiv
+		\begin{cases}
+		p = O + Dt & \text{Ray equation} \\
+		p = (1-\beta-\gamma) v_0 + \beta v_1 + \gamma v_2 & \text{Barycentric plane}
+		\end{cases}
+		\]
+		This lends itself to an elegant matrix:
+		\[
+		\begin{bmatrix}
+		-D & v_1-v_0 & v_2-v_0
+		\end{bmatrix}
+		\begin{bmatrix}
+		t \\ \beta \\ \gamma
+		\end{bmatrix}
+		=
+		O - v_0
+		\]
+		We can <a href="https://cs184.eecs.berkeley.edu/su25/assets/discussions/06-sol.pdf">solve for \(t, \beta,
+			\gamma\) using Cramer's rule</a>, giving us the intersection point on the triangle's plane in barycentric
+		coordinates. Then, by checking if the values of \(\alpha (= 1 - \beta - \gamma), \beta, \gamma \ge 0\), we can
+		tell if the intersection is within the triangle or not. This process is called the Möller-Trumbore intersection
+		algorithm.
+		<br><br>
+		By using Möller-Trumbore, we get some intersection data for free. The \(t\) value serves as distance along the
+		ray, and so lets us cut values too close or far from the camera and prevent intersecting occluded objects by
+		only taking the closest distance. The barycentric coordinates can be used to interpolate between assigned normal
+		vectors for each vertex on the triangle to give a normal at the intersection point as well.
+		<h3>Stopping when Spheres are Near</h3>
+		Sphere intersections follow the same basic method, but instead substituting the ray equation into an implicitly
+		defined sphere. Defining the sphere's center as \(C\),
+		\[
+		\begin{cases}
+		P = O + Dt & \text{Ray equation} \\
+		r^2 = (x-C_x)^2 + (y-C_y)^2 + (z-C_z)^2 = \sum_{i = 1}^{3} (P[i] - C[i])^2 & \text{Implicit Sphere}
+		\end{cases}
+		\]
+		This can be formed into a quadratic equation:
+		\[
+		0 = -r^2 + \sum_{i = 1}^{3} (O[i] + D[i]t - C[i])^2
+		\equiv
+		0 = (O^2 - 2O\cdot C + C^2 - r^2) + 2D\cdot(O-C)t + D^2t^2
+		\]
+
+		<figure style="float: inline-end;">
+			<img src="images/yields.png" width="200px">
+			<figcaption>I don't think the joke<br>works in this context...</figcaption>
+		</figure>
+		Which gives us zero roots (no intersection), one root (ray is tangent), or two roots (ray passing through the
+		sphere). We can then compare \(t\) values in the same way as we did for triangles to only check the nearest
+		intersections. Spheres also give the ability to compute perfect normals by computing the normalized vector from
+		the sphere's origin to the intersection point (which we can find by plugging in the computed \(t\) value into
+		the original ray equation).
+
+		<h2>Part 2: Bounding Volume Hierarchy</h2>
+
+		A Bounding Volume Hierarchy is an acceleration structure designed to cut down on the number of intersection
+		tests needed per ray. It achieves this by creating a binary tree of progressively smaller bounding boxes around
+		other bounding boxes or primitives until less than a certain number of primitives remain within, which becomes a
+		leaf of the tree. If a ray doesn't intersect the parent's bounding box, all children's bounding boxes (and as a
+		result all of the leaf nodes' primitives) are contained within and so the tree can be pruned. This leads to
+		O(log n) as opposed to O(n) intersection tests in the average case where n is the number of triangles, since the
+		tree's height is O(log n) and the number of primitives within each leaf is bounded by a constant "max primitives
+		per node".
+		<br><br>
+		To construct the BVH, we can run a recursive algorithm to build nodes. We first find the minimum bounding box of
+		all primitives this node is responsible for. If the number of primitives is less than a constant max amount of
+		primitives per node, then this node can be a leaf and we don't need to do any more splitting. Otherwise, we'll
+		split the primitives along the longest axis. There are many different heuristics for how to split the primitives
+		into two smaller sets, but I chose to split through the median of the primitive's centroid's coordinate along
+		the longest axis. This just meant sorting the primitive centroids by their longest axis's coordinate (in place,
+		see <a href="ec">extra credit section</a>) and assigning the low half to one child and the high half to another
+		child. These two
+		assignments can then be delegated to a recursive call of the same algorithm. Each child now has half the
+		elements of the parent because we split by the median, so eventually there will be fewer than the max amount of
+		primitives per node and the recursion will terminate.
+		<br><br>
+		The BVH greatly sped up rendering times, as seen by the following 8 thread, 600x800 renders. For Max Planck
+		(50801 triangles), rendering time was cut from 96.7 seconds to 0.150 seconds (0.0845 for creating the BVH and
+		0.0651 to find ray intersections), going from processing five thousand to 5.97 million rays/second. For the
+		angel statue, 236 seconds became 0.292 seconds (0.233s BVH + 0.0597s intersections), with 6.74 million
+		rays/second instead of 2k. The intersections per ray dropped especially fast because the scenes contained
+		significant areas of empty space, where many rays were immediately able to exit early because they didn't hit
+		the first bounding box. In scenes with less void, the effect might be less dramatic but still significant.
+		Bounding volume hierarchies also let me render a version of the angel statue in 1.10 seconds with 16 rays per
+		pixel, which went so impossibly slow on the non-BVH version that I aborted it after a few minutes at single
+		digit percentage completion.
+		<br><br>
+		* Sidenote, I didn't include intersections per ray as a metric because I think race conditions were messing with
+		the values since the count was highly dependent on the number of threads used. I didn't want to influence
+		timing by adding mutexes, and I didn't want to benchmark on one thread because the non-BVH code would run very
+		slow. Rays/second did also vary, but were still on the same order of magnitude as their single threaded
+		counterparts.
+		<br><br>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: separate; border-width: 1em;">
+				<tr>
+					<td>Model (Primitive Count)</td>
+					<td>Normal Render</td>
+					<td>Non-BVH Stats</td>
+					<td>BVH Stats<br>(BVH construction time + render time)</td>
+				</tr>
+				<tr>
+					<td>Beast (64618)</td>
+					<td style="text-align: center;">
+						<img src="images/beast.png" width="200px" />
+					</td>
+					<td>78.3s<br>6,100 rays/second</td>
+					<td>0.150s (0.0845s + 0.0651s)<br>6,370,000 rays/second</td>
+				</tr>
+				<tr>
+					<td>Max Planck (50801)</td>
+					<td style="text-align: center;">
+						<img src="images/maxplank.png" width="200px" />
+					</td>
+					<td>96.7s<br>5,000 rays/second</td>
+					<td>0.150s (0.100s + 0.0498s)<br>5,970,000 rays/second</td>
+				</tr>
+				<tr>
+					<td>Angel (133796)<br>1 ray/pixel</td>
+					<td style="text-align: center;">
+						<img src="images/lucy.png" width="200px" />
+					</td>
+					<td>236s<br>2,000 rays/second</td>
+					<td>0.292s (0.233s + 0.0597s)<br>6,740,000 rays/second</td>
+				</tr>
+				<tr>
+					<td>Angel (133796)<br>16 rays/pixel</td>
+					<td style="text-align: center;">
+						<img src="images/lucy1.png" width="200px" />
+					</td>
+					<td>N/A</td>
+					<td>1.10s (0.232s + 0.872s)<br>6,390,000 rays/second</td>
+				</tr>
+			</table>
+		</div>
+
+
+		<!--
+		<h2>Part 3: Direct Illumination</h2>
+		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
+		magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+		consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+		pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
+		laborum.
+
+		<h2>Part 4: Global Illumination</h2>
+		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
+		magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+		consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+		pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
+		laborum.
+
+		<h2>Part 5: Adaptive Sampling</h2>
+		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
+		magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+		consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+		pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
+		laborum.
+
+		<h2 id="ec">(Optional) Part 6: Extra Credit Opportunities</h2>
+		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
+		magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+		consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+		pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
+		laborum.
+
+		<h2>Additional Notes (please remove)</h2>
+		<ul>
+			<li>You can also add code if you'd like as so: <code>code code code</code></li>
+			<li>If you'd like to add math equations,
+				<ul>
+					<li>You can write inline equations like so: \( a^2 + b^2 = c^2 \)</li>
+					<li>You can write display equations like so: \[ a^2 + b^2 = c^2 \]</li>
+				</ul>
+			</li>
+		</ul>
+		<p>Here is an example 2x2 gridlike structure using an HTML table. Each <b>tr</b> is a row and each <b>td</b> is
+			a column in that row. You might find this useful for framing and showing your result images in an organized
+			fashion.</p>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+				<tr>
+					<td style="text-align: center;">
+						<img src="cornell.png" width="400px" />
+						<figcaption>Caption goes here.</figcaption>
+					</td>
+					<td style="text-align: center;">
+						<img src="cornell.png" width="400px" />
+						<figcaption>Caption goes here.</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td style="text-align: center;">
+						<img src="cornell.png" width="400px" />
+						<figcaption>Caption goes here.</figcaption>
+					</td>
+					<td style="text-align: center;">
+						<img src="cornell.png" width="400px" />
+						<figcaption>Caption goes here.</figcaption>
+					</td>
+				</tr>
+			</table>
+		</div>
+		-->
+	</div>
+
+
+	<footer>
+		Webpage based off <a href="https://github.com/cal-cs184/hw-webpage" target="_blank">CS 184 homework write up
+			template</a>
+	</footer>
+
+</body>
+
+</html>

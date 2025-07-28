@@ -1,0 +1,485 @@
+<html>
+
+<head>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=default'></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../style.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>GilgaMesh</h1>
+        <div style="text-align: center;">(CS184 Summer 2025 Homework 2 Write-Up)</div><br>
+        <div style="text-align: center;">~ Aagrim Hoysal ~</div>
+        <div style="text-align: center;">
+            <a href="https://ahoysal.github.io/cs184/gilgamesh">Loop Link</a> |
+            <a href="https://github.com/cal-cs184/hw2-meshedit-gilgamesh" target="_blank">GitHub Repo</a>
+        </div>
+
+        <!--
+		We've already added one heading per part, to make your write-up as navigable when grading. Please fit your write-up within these sections!
+		-->
+
+        <h2>Overview</h2>
+        GilgaMesh is a mesh editor that supports various mesh operations and some support for bezier curves and
+        surfaces. The name is just a pun, there are no kings of Uruk here (yet). As a bezier editor, It is able to draw
+        bezier curves at each interpolation step and move around each point to see how it affects the whole, as well as
+        turn bezier surfaces into a triangle mesh. As a mesh editor, it is able to flip and split triangles, smooth
+        shade models using Phong shading, and perform Loop subdivision on models.
+        <br><br>
+        3D modeling has always been interesting as a concept to me but I've never done it myself as it seemed like a
+        kind of mystical art. It still remains that way in a sense, but this project has demystified the process a
+        little by showing what tools are at modelers' disposal.
+
+
+        <h2>Section I: Bezier Curves and Surfaces</h2>
+
+        <h3>Part 1: Bezier curves with 1D de Casteljau subdivision</h3>
+        De Casteljau's algorithm is a way to define a nth-degree bezier curve in terms of a parametric function over \(0
+        \leq t \leq 1\). The curve is described as a recursive linear interpolation between points, where interpolating
+        between the first and second point with parameter \(t\) provides the first point for the next pass, the
+        interpolation of the second and third points provides the second point, etc. This is done until there is only
+        one point left, which becomes the point on the curve at \(t\).
+        <br><br>
+        In effect, we take the point \((1-t)\) of the way along each edge connecting adjacent points, starting from the
+        lower indexed point to the higher indexed point. We then connect each of those new points and do the same thing,
+        taking the point between successive points \((1-t)\) along the edge, until there are no more edges.
+        <br><br>
+        To implement de Casteljau's algorithm, I created a function that performed one step of the process; namely, took
+        in \(n+1\) points, interpolated along the edges, and returned a list of the \(n\) resulting points. Evaluating
+        the full bezier curve was then just a matter of calling the function recursively until only one point remained
+        and there were no more edges to interpolate.
+        <br><br>
+        Below is a table displaying de Casteljau's algorithm for a 5th degree bezier curve with 6 control points at each
+        step of interpolation, with the newest edges and points in red. Typically bezier curves for graphics tend to be
+        cubic beziers strung together, but the
+        same algorithm works for any number of points greater than two. Notice how the number of points and edges
+        decreases by one at each step. The final image shows the final curve, which is the parametric function defined
+        by de Casteljau's from \(0 \leq t \leq 1\).
+        <br><br>
+
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-width: 1em;">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/bezier0.png" width="300px" />
+                        <figcaption>Step 0, 6 points, 5 edges</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/bezier1.png" width="300px" />
+                        <figcaption>Step 1, 5 points, 4 edges</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/bezier2.png" width="300px" />
+                        <figcaption>Step 2, 4 points, 3 edges</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/bezier3.png" width="300px" />
+                        <figcaption>Step 3, 3 points, 2 edges</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/bezier4.png" width="300px" />
+                        <figcaption>Step 4, 2 points, 1 edge</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/bezier5.png" width="300px" />
+                        <figcaption>Step 5, 1 point</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/bezier6.png" width="300px" />
+                        <figcaption>The final point \(t=0.5\) on the curve</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/bezier7.png" width="300px" />
+                        <figcaption>The full final curve, \(0 \leq t \leq 1\)</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <br>
+        Additionally, here is an animated version of the last step of a different curve at various t values.
+        <br><br>
+        <img src="images/bezier.gif" width="50%" class="center" />
+
+        <h3>Part 2: Bezier surfaces with separable 1D de Casteljau</h3>
+
+        <figure style="float: inline-end;">
+            <img src="images/bezTeapot.png" width="300px" />
+            <figcaption>Teapot generated from bezier surface.<br>Triangles were generated from<br>sampling the bezier
+                surface.</figcaption>
+        </figure>
+
+        Bezier surfaces in 3D are defined by \(n \times n\) 3D points, with interpolation over two parameters, \(u\) and
+        \(v\), ranging between zero and one. Extending de Casteljau's algorithm to surfaces is simply a matter of
+        evaluating the same algorithm as a curve at \(t = u\) on each row. This gives us one point per row, giving a
+        total of \(n\) points. We can then feed the \(n\) resulting points into de Casteljau's algorithm for a curve
+        again, with \(t = v\), giving us a single point. In total, letting \(0 \leq u, v \leq 1\) defines the parametric
+        surface of the bezier surface.
+
+        <br><br>
+
+        Implementing 3D bezier surfaces requires almost no modification from the 2D algorithm except using 3D points to
+        interpolate between, running the original algorithm \(n\) times along the rows with \(t = u\), and running the
+        original algorithm one more time on the output of the \(n\) rows with \(t = v\).
+
+        <h2>Section II: Triangle Meshes and Half-Edge Data Structure</h2>
+
+        <h3 id="part3">Part 3: Area-weighted vertex normals</h3>
+        Half-edge meshes allow for efficient calculation of area weighted vertex normals. To calculate them for a
+        vertex, one must find all faces the vertex is a part of, find their normal, and weight that normal by the area
+        of the face it is a part of. The weighted average of the normal of all surrounding faces should be normal of the
+        vertex. Finding this normal allows for lighting calculations to be done per vertex in Gourard shading, which can
+        then be interpolated using barycentric coordinates, or interpolating the normals themselves and performing the
+        lighting calculations per fragment as in Phong shading.
+
+        <br><br>
+        <figure style="float: inline-end;">
+            <img src="images/flatPot.png" width="300px">
+            <figcaption>Flat shaded teapot.<br>Very clear edges to faces.</figcaption>
+            <br>
+            <img src="images/phongPot.png" width="300px">
+            <figcaption>Phong shaded teapot.<br>Face edges aren't as visible.<br>Corners tend to be lighted weirdly.
+            </figcaption>
+        </figure>
+
+        I assumed all faces were triangles as per the problem statement, so I had assurances that after three successive
+        half-edges I would end up at the original half edge and would have traversed all half-edges of the face. Thus,
+        starting at the half-edge stored by the vertex itself that points away from the vertex, I iterated through all
+        three half-edges of the triangle and stored their associated source vertexes. Then, I took the cross product the
+        vectors pointing from the first point to the second and third respectively, which serves as a normal scaled by
+        the face's area*, and added it to an accumulated vector. Finally, I took the third edge's twin and set that as
+        the start of the next face to iterate through. This works because the third edge points back to the original
+        vertex, so it's twin must originate from that vertex, meaning the twin's face must be a face that surrounds the
+        vertex. Using this, we enforce the invariant that the first half-edge we look at per face is the one facing away
+        from the original vertex. This allows for an easy check on when to end the process– there is only one half-edge
+        per face that points away from a particular vertex, and we maintain that the third edge's twin always points
+        away from the original vertex, so if the twin is the same as our starting half-edge then we must have started at
+        that face. Once we have the accumulated vector, we can normalize it and use it as a vertex normal.
+        <br><br>
+        This leaves two questions unanswered: why does the cross product serve as a normal scaled by area*? And what
+        about boundaries? The latter is quite simple; if we hit a boundary while traversing the triangles around the
+        vertex counter-clockwise, then there must be a boundary right of the original half-edge we started at because
+        the mesh is a manifold. Thus we can continue traversing clockwise from the original triangle until we hit an
+        edge, in which case we have hit both edges of the fan that emanates from the original vertex. There cannot be
+        any other triangles around the point, again because the mesh is a manifold, so we can stop.
+        <br><br>
+        The cross product being a normal scaled by area* comes from the fact that the cross product is perpendicular to
+        both vectors, and its magnitude is the area of the parallelogram that is made by the two vectors. If we divide
+        the magnitude/area by two, we get half the area of the parallelogram, i.e. the area of the triangle. We also
+        know the direction is normal to the surface, and because the triangles are always oriented counterclockwise we
+        can calculate which direction the normal should go easily. If we accumulate all of the cross products, we will
+        get the weighted normals scaled by the area of the triangle times two; however, because we eventually are going
+        to normalize the accumulated cross products and the two is a constant factor, we don't have to divide it out
+        because the final normalization will do so anyways.
+
+
+        <h3>Part 4: Edge flip</h3>
+        In theory, edge flips are simple. We just need to move a diagonal separating a quadrilateral to the other
+        diagonal. With half-edges, we need to shuffle some pointers. How hard could it be? So I thought I could logic it
+        out. So despite the <a
+            href="https://cs184.eecs.berkeley.edu/su25/hw/hw2/section2/#mesh-pointer-recommendations">warnings</a> I
+        decided to try and think through all the pointer reassignments. That went predictably bad, with faces
+        disappearing left and right and segfaults galore. After trying to debug it a few times and figuring out there
+        were both pointers to itself and pointer loops of length five, I finally heeded the warning and reassigned all
+        of the pointers, even if they theoretically shouldn't have changed. Turns out I forgot to assign two of the six
+        "next" pointers in my original implementation… Then, I was able to cull the unnecessary pointer reassignments
+        using many, many drawings of triangles, checking along the way to make sure flipping still worked.
+        <br><br>
+        I was spending a lot of time initially trying to make sure I wasn't accessing modified pointers instead of the
+        original, so to make my life easier I made copies of the originals at the very top of the function. This helped
+        immensely with implementation but also with readability, as the code wasn't a jumble of
+        <code>self->next()->next()->vertex()->halfedge()->face() = twin->next()->face()->next()->next()->face();</code>
+        (exaggerating of course, but…).
+        <br><br>
+        <figure>
+            <div style="display: flex; flex-direction: column; align-items: center;">
+                <table style="width: 100%; text-align: center; border-collapse: separate; border-width: 1em;">
+                    <tr>
+                        <td style="text-align: center;">
+                            <img src="images/normalPot.png" width="300px" />
+                            <figcaption>No flipping</figcaption>
+                        </td>
+                        <td style="text-align: center;">
+                            <img src="images/flipedPot.png" width="300px" />
+                            <figcaption>Some flipping</figcaption>
+                        </td>
+                        <td style="text-align: center;">
+                            <img src="images/uhPot.png" width="300px" />
+                            <figcaption>Too much flipping</figcaption>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <figcaption>Comparison of the original pot mesh, the pot mesh after some flips, and the pot mesh after
+                legal but malicious flips that result in a very different geometry</figcaption>
+        </figure>
+
+        <h3 id="part5">Part 5: Edge split</h3>
+        Splitting edges has many pointer reassignments like flip edge, but also creates new half-edges, edges, vertexes,
+        and faces. For my own sanity, I segmented the code to set all of the pointers for each object all at the same
+        time, for example assigning all the half-edge "next" pointers in one go. Drawing out the triangles then made it
+        easy to see which edges should point to what, which objects needed to be created, etc. Implementing per
+        functionality versus object helped me mentally focus on one task rather than having to context switch between
+        each object. Partially because of this, my code worked first try, which was definitely a welcome surprise.
+        <br><br>
+        I also implemented support for splitting boundary edges as extra credit. To split boundary edges, you only split
+        one side of the triangle. I renamed all the variables associated with one side of the triangle by adding a big
+        obnoxious suffix, and from there it was easy to isolate the parts associated with that side into a
+        <code>if (!isBoundary)</code> block. The refactoring was almost mechanical and after placing all the suffixed
+        pointer assignments into the conditional, minimal changes had to be made to make boundary edge splits work.
+
+        <br><br>
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-width: 1em;">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/headlightNone.png" width="300px" />
+                        <figcaption>Original headlight mesh</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/headlightSplit.png" width="300px" />
+                        <figcaption>Split headlight mesh</figcaption>
+                    </td>
+                </tr>
+            </table>
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-width: 1em;">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/hoodNone.png" width="300px" />
+                        <figcaption>Original hood mesh</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/hoodFlip.png" width="300px" />
+                        <figcaption>Hood mesh after flips</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/hoodFlipSplit.png" width="300px" />
+                        <figcaption>Hood mesh after flips and splits</figcaption>
+                    </td>
+                </tr>
+            </table>
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-width: 1em;">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/windowSplit.png" width="300px" />
+                        <figcaption>Window mesh after boundary splits</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+
+        <h3>Part 6: Loop subdivision for mesh upsampling</h3>
+        Loop subdivision is a two step process used to subdivide a mesh, where you split each triangle into four, then
+        adjust vertex positions based on the adjacent vertices. It makes a little more sense to flip those steps in
+        practice by computing the new positions first, then subdividing each triangle, and finally moving the vertexes
+        into their precomputed new position.
+        <br><br>
+        The updated position of a vertex depends on if it was in the original mesh or not. I first computed the original
+        vertexes by traversing through each of the surrounding vertices (see <a href="#part3">part 3</a>), then finding
+        the new position \(p_n\) from a weighted average of the old position \(p_o\) and the \(n\) surrounding vertices'
+        positions \(p_i\):
+        \[
+        p_n = (1 - n \cdot u) \cdot p_o + \sum^{n}_{i=1} u \cdot p_i \\
+        n = \text{valence} = \text{# of old vertexes around} \\
+        u =
+        \begin{cases}
+        \frac{3}{16} & \text{if } n = 3 \\
+        \frac{3}{8n} & \text{otherwise} \\
+        \end{cases}
+        \]
+        For each edge, we then need a new vertex to serve as endpoints for the internal subdivision edges. The new
+        position is defined as a weighted average of \(\frac{3}{8}^{\text{th}}\) for each terminator of the edge it is
+        on and \(\frac{1}{8}^{\text{th}}\) the opposite two sides (all vertexes of which can be accessed through
+        traversing the half-edge associated with the edge or half-edge's twin). At this point in the implementation, I
+        checked that all my calculations made sense by modifying the positions without subdivision, which helped me
+        catch some bugs. After computing and storing these positions, we can proceed to actually modifying mesh
+        topology.
+        <br><br>
+        Each triangle now needs to be split into four smaller triangles. We can do this by splitting each edge in the
+        original mesh once. Figuring out when an edge was in the original mesh was tricky and caused many bugs, but I
+        settled on marking vertices as "new" as they were added by the process and making sure neither side of the edge
+        was marked as such.
+        <br><br>
+        Splitting the mesh was already implemented in <a href="#part5">part 5</a>, so the complexity came from marking
+        <i>edges</i> as new, which was required for the next step. Note that a new edge is NOT simply an edge object
+        that was not in the original mesh, since true edges in the original mesh get split into two different edge
+        objects that were not part of the original mesh but do not need to be split again. Rather, a new edge is one
+        that does not correspond to (half of) an edge in the original mesh. Since the edge splitting algorithm
+        implementation takes the original half-edge associated with the edge and its twin and puts them on two different
+        edges running parallel to the initial edge, I stored both before the split and cross referenced the edge they
+        end up at with all four edges the edge splitting algorithm creates. If the edge was the same as one of the edges
+        parallel to the original edge, I didn't mark it as new, and vice versa.
+        <br><br>
+        To ensure regularity in splitting, we now need to flip all new edges that go from a new vertex to an old vertex.
+        By marking the edges as new or not, this becomes trivial; just do a check on the vertices of all new edges, flip
+        as needed, and mark them as no longer new for the next pass. Debugging this, however, took a long time. I had to
+        edit the mesh feature detail panel to add data on the "newness" of an edge before I realized that iterating over
+        the original mesh and iterating over the "not new edges" wasn't the same thing, since two "not new edges" were
+        added every time a original mesh edge was split, meaning lots of spinning wheels of death while it tried to
+        recursively split all edges to infinity. I never want to look at another "isNew" variable again.
+        <br><br>
+        Finally, I just moved all the vertexes from their old position to the precalculated new position from the
+        earlier parts, marking all vertices as old again for future iterations, and that was loop subdivision
+        implemented!
+
+        <h4>Some... quirks with Loop subdivision</h4>
+        Loop subdivision usually assumes you want a smooth model, so it doesn't take well to sharp points. Points tend
+        to form into smooth lumps. However, if you want to keep some sharpness, subdividing sharp triangles into smaller
+        triangles gives more weight to the existing points near the sharp point, preserving some pointyness. Below is a
+        table of two similar scenes at different loop subdivision levels, with the bottom row having more subdivisions
+        at the base. Notice how the second row preserves more of the point.
+        <br><br>
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-width: 1em;">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/sharp0.png" width="300px" />
+                        <figcaption>No subdvision, 0 iterations</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/sharp1.png" width="300px" />
+                        <figcaption>No subdvision, 1 iteration</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/sharp2.png" width="300px" />
+                        <figcaption>No subdvision, 2 iterations</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/split0.png" width="300px" />
+                        <figcaption>Subdvision, 0 iterations</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/split1.png" width="300px" />
+                        <figcaption>Subdvision, 1 iteration</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/split2.png" width="300px" />
+                        <figcaption>Subdvision, 2 iterations</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <br>
+        Another quirk is that symmetric geometries, if their topology isn't in the same symmetry group, will not retain
+        those symmetries. Take for example a cube. The geometry had octahedral symmetry, yet the topology of a naïve
+        cube contains only one diagonal along each face, so the topology is not symmetrical in that way. Thus the
+        subdivisions are asymmetric, meaning the geometry becomes so as well after some iterations. By preprocessing to
+        make the topology symmetric (for example splitting each diagonal per face into a cross), we preserve more the of
+        the geometric symmetries as well.
+        <br><br>
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-width: 1em;">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/cube0.png" width="300px" />
+                        <figcaption>Base non-symmetric topology</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/symmetric0.png" width="300px" />
+                        <figcaption>Subdivided per face topology</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/cube1.png" width="300px" />
+                        <figcaption>Base, 1 iteration</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/symmetric1.png" width="300px" />
+                        <figcaption>Subdivided, 1 iteration</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/cube2.png" width="300px" />
+                        <figcaption>Base, 2 iterations</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/symmetric2.png" width="300px" />
+                        <figcaption>Subdivided, 2 iterations</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/cube3.png" width="300px" />
+                        <figcaption>Base, 3 iterations</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/symmetric3.png" width="300px" />
+                        <figcaption>Subdivided, 3 iterations</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/cube4.png" width="300px" />
+                        <figcaption>Base, 4 iterations</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/symmetric4.png" width="300px" />
+                        <figcaption>Subdivided, 4 iterations</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <br>
+        The base form gains a pentagonal profile in a way the original didn't have symmetrically, whereas the subdivided
+        one does not and stays vaugley six-sided.
+        <h4>Extra Credit: Loop subdivision on boundaries</h4>
+        To implement Loop subdivision on boundaries, I found both boundaries connected to the mesh by iterating around,
+        then computed the new boundary vertex position by a <a
+            href="https://www.geometry.caltech.edu/pubs/DDMD16_SuppMat1.pdf">three-fourths-one-fourths weighting</a>
+        between the old point position and the two neighboring boundary points. This makes the boundary still sharp
+        while curving along the boundary. The cool results are below!
+        <br><br>
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <table style="width: 100%; text-align: center; border-collapse: separate; border-width: 1em;">
+                <tr>
+                    <td style="text-align: center;">
+                        <img src="images/headlightBounds.png" width="300px" />
+                        <figcaption>Headlight with no Loop subdivision</figcaption>
+                    </td>
+                    <td style="text-align: center;">
+                        <img src="images/headlightSmooth.png" width="300px" />
+                        <figcaption>Headlight Loop subdivided! Rounded.</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <!--
+        <h2>(Optional) Section III: Potential Extra Credit - Art Competition: Model something Creative</h2>
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
+        magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+        consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+        pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
+        laborum.
+
+        <h2>Additional Notes (please remove)</h2>
+        <ul>
+            <li>You can also add code if you'd like as so: <code>code code code</code></li>
+            <li>If you'd like to add math equations,
+                <ul>
+                    <li>You can write inline equations like so: \( a^2 + b^2 = c^2 \)</li>
+                    <li>You can write display equations like so: \[ a^2 + b^2 = c^2 \]</li>
+                </ul>
+            </li>
+        </ul>
+    </div>-->
+
+        <footer>
+            Webpage based off <a href="https://github.com/cal-cs184/hw-webpage" target="_blank">CS 184 homework write up
+                template</a>
+        </footer>
+</body>
+
+</html>
