@@ -251,6 +251,15 @@
 		into Monte Carlo integration.
 
 		<h3>Monte Carlo (finally some fun!)</h3>
+				<figure style="float: inline-end;">
+			<figcaption><strong>Why importance sampled Monte Carlo?</strong></figcaption>
+			<br>
+			<img width="300px" src="images/ballsUHS.png">
+			<figcaption>Doesn't use Monte Carlo<br>importance sampling (13.7s)</figcaption>
+			<br>
+			<img width="300px" src="images/ballsLS.png">
+			<figcaption>Utilizes Monte Carlo<br>importance sampling (12.8s)</figcaption>
+		</figure>
 		The intuition for Monte Carlo integration is generally that we will take random samples of the function within
 		the integration region. Each of these random samples will be weighted by the probability (in a loose sense, we
 		eventually use the PDF) that that specific sample was chosen, so that samples in neighborhoods we sample less
@@ -262,7 +271,7 @@
 		distribution over \([a, b)\) with pdf \(p(x_i)\) and \(N\) samples,
 
 		\[
-		\int_{a}^{b} f(x) dx = \frac{1}{N}\sum_{i=0}{\frac{f(x_i)}{p(x_i)}
+		\int_{a}^{b} f(x) dx = \frac{1}{N}\sum_{i=1}^N \frac{f(x_i)}{p(x_i)}
 		\]
 
 		In combination with our rendering equation, we can substitute the integral with the importance sampled Monte
@@ -272,8 +281,8 @@
 		the two unit vectors \(\omega_i\) and \(n\), the normal),
 
 		\[
-		L_o(p, \omega_o) = L_e(p, \omega_o) + \frac{1}{N} \sum_{i=0}^N \frac{L_e(p_{next}, x_i) \cdot f_r(p, x_i \to
-		\omega_o) \cdot x_i \cdot n}{p(x_i)}
+		L_o(p, \omega_o) = L_e(p, \omega_o) + \frac{1}{N} \sum_{i=1}^N \frac{L_e(p_{next}, x_i) \cdot f_r(p, x_i \to
+		\omega_o) \cdot (x_i \cdot n)}{p(x_i)}
 		\]
 
 		I implemented two sampling methods– uniform hemisphere sampling and light sampling. Uniform hemisphere sampling
@@ -287,6 +296,11 @@
 		incoming/outgoing rays because the pathtracer propagates paths backwards. This method gave results, but were
 		much grainer for the same amount of samples compared to the next approach.
 		<br><br>
+		<figure style="float: inline-end;">
+			<img width="300px" src="images/dragon.png">
+			<figcaption>Dragon rendered with light sampling.<br>Uniform hemisphere doesn't work with<br>point lights,
+				so can't compare.</figcaption>
+		</figure>
 		Light sampling actually takes advantage of the importance-sampled Monte Carlo method. We modify the PDF to scale
 		with the predicted distribution of light contribution, which can be done through a higher PDF in the direction
 		of the light and its surrounding areas in the case of an area light. We can then sample proportionally more in
@@ -301,21 +315,59 @@
 		Light sampling lets soft shadows form with much less computation than uniform sampling, although it still
 		requires a moderate amount of rays to converge. The table below provides renderings at one ray per pixel, but
 		with different amounts of rays sent after the first bounce with light sampling. As you can see, more rays form
-		soft shadows with less noise.
+		soft shadows with less noise. (All renders at one sample per pixel)
 		<br>
-		[TABLE]
-		<br><br>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 1em; ">
+				<tr>
+					<td style="text-align: center;">
+						<img src="images/bunnyLS1.png" width="300px" />
+						<figcaption>Bunny at 1 ray/light.<br>Very noisy shadows.</figcaption>
+					</td>
+					<td style="text-align: center;">
+						<img src="images/bunnyLS4.png" width="300px" />
+						<figcaption>Bunny at 4 rays/light.<br>Noisy shadows.</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td style="text-align: center;">
+						<img src="images/bunnyLS16.png" width="300px" />
+						<figcaption>Bunny at 16 rays/light.<br>Less noisy shadows.</figcaption>
+					</td>
+					<td style="text-align: center;">
+						<img src="images/bunnyLS64.png" width="300px" />
+						<figcaption>Bunny at 64 rays/light.<br>Better shadows.</figcaption>
+					</td>
+				</tr>
+			</table>
+		</div>
+
+		<figure style="float: inline-end;">
+			<img width="200px" src="images/bunnyH8-64.png">
+			<figcaption>Uniform Hemisphere (9.53s)<br>8 rays/pixel, 64 rays/bounce</figcaption>
+			<img width="200px" src="images/bunnyL2-2.png">
+			<figcaption>Light Sampling (0.0960s)<br>2 rays/pixel, 2 rays/bounce</figcaption>
+		</figure>
+		<br>
 		Uniform hemisphere sampling and lighting sampling will both eventually converge to the same rendered image– the
 		difference is how fast. Uniform sampling, with the same amount of rays, will waste more rays on areas with no
 		contribution to the final illuminance and a smaller proportion of the rays will hit the light. This means that
 		information about direct lights propagates slower over the number of samples taken. Meanwhile, light sampling
 		allows for information about the light to propagate quicker as the number of samples grows by tending those
 		samples towards lights. The computational efficiency difference is stark; compare the two similar images to the
-		right. The light sampling image has less noise and looks nearly identical, if not slightly better, than the
-		uniform hemisphere image. However, despite being worse quality, the uniform hemisphere sampling image took 9.53
-		seconds to render, with 8 samples per pixel and 64 rays for the second bounce. The light sampling image only
-		took 0.0960 seconds with a piddly 2 samples per pixel and 2 rays for the second bounce, within spitting distance
-		of real time rendering.
+		right. The image quality is similar, with less noise on average in the light sampling image but better shadows
+		in the uniform hemisphere sampling image. However, despite being of similar quality, the uniform hemisphere
+		sampling image took 9.53 seconds to render, with 8 samples per pixel and 64 rays for the second bounce. The
+		light sampling image only took 0.0960 seconds with a piddly 2 samples per pixel and 2 rays for the second
+		bounce, within spitting distance of real time rendering. If we allocate the same amount of resources as the
+		uniform hemisphere sample (8 samples per pixel, 64 rays for the second bounce), light sampling gives us the
+		bottom image in 8.97 seconds.
+		<figure>
+			<img src="images/bunnyL8-64.png">
+			<figcaption>Light Sampling (8.97s)<br>8 rays/pixel, 64 rays/bounce</figcaption>
+		</figure>
+
+
 
 		<!--
 		<h2>Part 4: Global Illumination</h2>
