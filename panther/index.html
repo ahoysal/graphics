@@ -211,15 +211,113 @@
 			</table>
 		</div>
 
+		<h2>Part 3: Direct Illumination</h2>
+		<blockquote><strong>For CS184 graders!</strong> Most of this is context leading into the actual write-up
+			questions. The actual answers are under the heading “Monte Carlo (finally some fun!)".</blockquote>
+		Direct illumination is the irradiance that a pathtracer receives from a point, only based on rays that go
+		directly to a light source or bounce off one surface and then hit a light source. As you can imagine, this is
+		simpler than considering rays that take more than one bounce, but does require thinking about how to get the
+		radiance from the one bounce case. We need to integrate incoming light and its radiance (even if it's zero) over
+		the hemisphere to figure out how much gets reflected, and the practical way to do this is through Monte Carlo
+		integration, which requires sampling the hemisphere.
+		<br><br>
+		Lets worry about <i>how</i> we sample later. Monte Carlo integration uses the rendering equation
+
+		\[
+		L_o(p, \omega_o) = L_e(p, \omega_o) + \int_{\mathcal{H}^2} L_i(p, \omega_i) \cdot f_r(p, \omega_i \to \omega_o)
+		\cdot \cos \theta_i \cdot d\omega_i
+		\]
+
+		Integrating over the hemisphere \(\mathcal{H}^2\) for all incoming solid angles \(\omega_i\) where \(L_o\) is
+		the light out, \(L_e\) is the light emitted by the surface, \(f_r\) is how light scatters/gets reflected based
+		on the solid angles of the “viewing"* solid angle (\(\omega_o\)), the light coming from the solid angle in
+		\(L_i\), and the cosine of the incoming solid angle with the normal of the surface. The derivation is out of
+		scope for this explanation, but the integral can be interpreted as adding up all the incoming light rays and
+		multiplying by how much of that light gets reflected in the outgoing direction \(\omega_o\) that we're
+		interested in (the cosine term comes from <a
+			href="https://en.wikipedia.org/wiki/Lambert%27s_cosine_law">Lambert's cosine law</a>). The two questions
+		that we will tackle are defining (narrowly for diffuse surfaces only) \(f_r\), the function that returns the
+		amount of light that reflects in a direction based on the incoming and outgoing rays, and how to approximate
+		this integral with the aforementioned Monte Carlo method.
+		<br><br>
+		\(f_r\) is thankfully quite simple in the case of diffuse Lambertian surfaces (things that tend to look matte);
+		any light ray coming in gets scattered in all directions of the hemisphere equally. Thus our diffuse \(f_r\) is
+		not a function of the incoming or outgoing ray at all and only needs to take into account how much light gets
+		absorbed by the surface, what we call its albedo. The function ends up being \(f_r = \frac{\rho}{\pi}\) with
+		\(\rho\) being the albedo, divided by a \(\pi\) term as a result of the energy being redistributed across the
+		hemisphere.
+		<br><br>
+		Now that we have a feel for the parts of the integral, we actually need to evaluate it. Its finally time to get
+		into Monte Carlo integration.
+
+		<h3>Monte Carlo (finally some fun!)</h3>
+		The intuition for Monte Carlo integration is generally that we will take random samples of the function within
+		the integration region. Each of these random samples will be weighted by the probability (in a loose sense, we
+		eventually use the PDF) that that specific sample was chosen, so that samples in neighborhoods we sample less
+		can represent that neighborhood proportionally more to make up for the lack of other samples. The probability
+		weighting, which is technically <i>importance-sampled</i> Monte Carlo, may seem like an unnecessary
+		overcomplication, but it helps improve converging speed by sampling fewer rays with near-zero contribution.
+		<br><br>
+		Formally, this version of Monte Carlo looks like, with some \(x_i\) sampled from a non-zero probability
+		distribution over \([a, b)\) with pdf \(p(x_i)\) and \(N\) samples,
+
+		\[
+		\int_{a}^{b} f(x) dx = \frac{1}{N}\sum_{i=0}{\frac{f(x_i)}{p(x_i)}
+		\]
+
+		In combination with our rendering equation, we can substitute the integral with the importance sampled Monte
+		Carlo. We can also replace \(L_i(p, \omega_i)\) with \(L_e(p_{next}, \omega_i)\), the light from the second ray
+		sent, since we are doing direct illumination and don't care about light that wasn't emitted from the first
+		surface in that direction specifically. Thus we get (with \(\cos \theta_i\) being replaced by the dot product of
+		the two unit vectors \(\omega_i\) and \(n\), the normal),
+
+		\[
+		L_o(p, \omega_o) = L_e(p, \omega_o) + \frac{1}{N} \sum_{i=0}^N \frac{L_e(p_{next}, x_i) \cdot f_r(p, x_i \to
+		\omega_o) \cdot x_i \cdot n}{p(x_i)}
+		\]
+
+		I implemented two sampling methods– uniform hemisphere sampling and light sampling. Uniform hemisphere sampling
+		does exactly what it says on the tin, i.e. sampling each direction on the hemisphere with equal probability. The
+		probability density function is uniform over the integration region, meaning we don't converge any faster than
+		normal Monte Carlo without importance sampling. The PDF \(p(x_i)\) is always \(\frac{1}{2\pi}\). It simply is
+		just sending random rays from every initial bounce in a constant amount of directions to see if it hits a light
+		(and polling how much it is emitting) or not. My code literally loops \(N\) times, samples a uniform random ray,
+		finds \(f_r\), finds the random ray's next intersection, and computes the formula above. The only tricky part
+		was morphing from world to local coordinate spaces and back, as well as making sure to negate the
+		incoming/outgoing rays because the pathtracer propagates paths backwards. This method gave results, but were
+		much grainer for the same amount of samples compared to the next approach.
+		<br><br>
+		Light sampling actually takes advantage of the importance-sampled Monte Carlo method. We modify the PDF to scale
+		with the predicted distribution of light contribution, which can be done through a higher PDF in the direction
+		of the light and its surrounding areas in the case of an area light. We can then sample proportionally more in
+		that region while still acknowledging the rest of the hemisphere with fewer, more weighted samples. In practice,
+		there are some implementation details to take care of. It tends to be best to send a set amount of rays around
+		<i>each</i> light. For point lights, we sample once and extrapolate that one sample for all intended samples of
+		the light. We also need to take care of obstructions, since our sample direction that tends to face the light
+		doesn't check for occlusion. This can be fixed by sending a ray from the surface to the light source and
+		checking for collisions; if there is one, then the light source is blocked and its contribution is zero.
+		Otherwise, it's calculating the same values as the uniform sample, except the PDF varies.
+		<br><br>
+		Light sampling lets soft shadows form with much less computation than uniform sampling, although it still
+		requires a moderate amount of rays to converge. The table below provides renderings at one ray per pixel, but
+		with different amounts of rays sent after the first bounce with light sampling. As you can see, more rays form
+		soft shadows with less noise.
+		<br>
+		[TABLE]
+		<br><br>
+		Uniform hemisphere sampling and lighting sampling will both eventually converge to the same rendered image– the
+		difference is how fast. Uniform sampling, with the same amount of rays, will waste more rays on areas with no
+		contribution to the final illuminance and a smaller proportion of the rays will hit the light. This means that
+		information about direct lights propagates slower over the number of samples taken. Meanwhile, light sampling
+		allows for information about the light to propagate quicker as the number of samples grows by tending those
+		samples towards lights. The computational efficiency difference is stark; compare the two similar images to the
+		right. The light sampling image has less noise and looks nearly identical, if not slightly better, than the
+		uniform hemisphere image. However, despite being worse quality, the uniform hemisphere sampling image took 9.53
+		seconds to render, with 8 samples per pixel and 64 rays for the second bounce. The light sampling image only
+		took 0.0960 seconds with a piddly 2 samples per pixel and 2 rays for the second bounce, within spitting distance
+		of real time rendering.
 
 		<!--
-		<h2>Part 3: Direct Illumination</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
-		magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
-		consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
-		pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
-		laborum.
-
 		<h2>Part 4: Global Illumination</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
 		magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
