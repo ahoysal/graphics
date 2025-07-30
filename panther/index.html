@@ -596,18 +596,70 @@
 		</div>
 		<figure>
 			<img src="images/globalIll/banana1024.png" width="600px">
-			<figcaption>1024 rays/pixel, thats a lot of<span style='font-family: "Press Start 2P", monospace; font-weight: 200; font-style: normal; font-size: 0.5em;'> * Potassium</span></figcaption>
+			<figcaption>1024 rays/pixel, thats a lot of<span
+					style='font-family: "Press Start 2P", monospace; font-weight: 200; font-style: normal; font-size: 0.5em;'>
+					* Potassium</span></figcaption>
 		</figure>
 
-		<!--
-
 		<h2>Part 5: Adaptive Sampling</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
-		magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
-		consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
-		pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
-		laborum.
+		Adaptive sampling is simple at a high level; send out more rays proportionally to how different the samples are
+		from each other. We take in a constant tolerance (ex. we want the illuminance to be within 5% of the true value)
+		and for each pixel perform a basic 95% confidence interval test with the mean and variance of the illuminance of
+		the samples. If we're 95% confident that the mean lies within our constant tolerance, we can stop sending out
+		more rays, as we are close
+		enough. All this confidence interval-ing can be expressed by checking the following inequality:
+		\[
+		1.96 \frac{\sigma}{\sqrt{n}} \ge T \cdot \mu
+		\]
+		Where \(T\) is the tolerance. Once this condition is satisfied, we deem the pixel “converged enough” and stop
+		sampling more. This allows for more complex regions to be sampled more than simpler regions, and increases the
+		fidelity without increasing runtime by redistributing rays from simpler pixels to ones that need more rays to
+		get rid of noise.
+		<br><br>
+		There are a few tricks to make the code slightly faster. One is batching, i.e checking the condition every \(k\)
+		rays versus every ray, just because the convergence check involves slower operations like a square root and
+		division. Another optimization is using an alternate formula for variance using the first and second moments:
+		\[
+		\sigma^2 = E[X^2] - E[X] = \frac{\sum (x^2)}{n} - \frac{(\sum x)^2}{n^2} = \frac{(\sum (x^2)) - \frac{(\sum
+		x)^2}{n}}{n}
+		\]
+		Thus, we can just accumulate \(\sum (x^2)\) and \(\sum x\) and plug into the formula to get the variance at any
+		point while sampling without having to reiterate over all the points. This is also useful since we need \(\sum
+		x\) anyways to calculate the mean. The last thing that needs to be done is to loop sampling while the
+		convergence term is less than the tolerance times the mean and the samples are less than the maximum samples
+		(just in case the illuminance doesn't converge in a reasonable amount of samples).
+		<br>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 0.5em; ">
+				<tr>
+					<td>
+						<img src="images/adaptive/dragon.png" width="400px">
+						<figcaption>Rendered dragon with adaptive sampling (65.1s)</figcaption>
+					</td>
+					<td>
+						<img src="images/adaptive/dragon_rate.png" width="400px">
+						<figcaption>Dragon sampling rate (red > green > blue)</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/adaptive/spheresAS.png" width="400px">
+						<figcaption>Rendered spheres with adaptive sampling (76.4s)</figcaption>
+					</td>
+					<td>
+						<img src="images/adaptive/spheresAS_rate.png" width="400px">
+						<figcaption>Sphere sampling rate (red > green > blue)</figcaption>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<br>
+		Notice how edges and shadows tend to need more rays (check out that clear increase in the dragon's shadow!) and
+		any surfaces that face other surfaces (such as the ground) and therefore might get more indirect illumination.
+		Both images were rendered with Russian Roulette, 100 bounces max, 1 light sample, and adaptive sampling with
+		2048 rays max, a batch size of 64 rays, and a tolerance threshold of 5%.
 
+		<!--
 		<h2 id="ec">(Optional) Part 6: Extra Credit Opportunities</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
 		magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
