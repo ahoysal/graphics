@@ -2,7 +2,10 @@
 
 <head>
 	<script src='https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=default'></script>
-	<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link
+		href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Press+Start+2P&display=swap"
 		rel="stylesheet">
 	<link rel="stylesheet" href="../style.css">
 </head>
@@ -251,7 +254,7 @@
 		into Monte Carlo integration.
 
 		<h3>Monte Carlo (finally some fun!)</h3>
-				<figure style="float: inline-end;">
+		<figure style="float: inline-end;">
 			<figcaption><strong>Why importance sampled Monte Carlo?</strong></figcaption>
 			<br>
 			<img width="300px" src="images/ballsUHS.png">
@@ -368,14 +371,235 @@
 		</figure>
 
 
+		<h2>Part 4: Global Illumination</h2>
+		<figure style="float: inline-end;">
+			<img src="images/globalIll/spheresA.png" width="200px">
+			<figcaption>Spheres with<br>global illumination!</figcaption>
+			<br>
+			<img src="images/globalIll/walle.png" width="200px">
+			<figcaption>Wall-e, look at those<br>nice shadows!</figcaption>
+		</figure>
+		Sometimes (most of the time) we want to simulate more than just one bounce. To do this, we add <strong>indirect
+			lighting</strong> to the previously computed direct lighting. Indirect lighting considers different paths
+		with multiple bounces the light could take to the camera, including bounces off of other objects. Remember how
+		we substituted \(L_i(p, \omega_i)\) with \(L_e(p_{next}, \omega_i)\) for direct lighting, since we only
+		considered emission after one bounce? We now need to actually approximate \(L_i(p, \omega_i)\). Intuitively this
+		means we need to calculate the next “reverse bounce”, which we can do by sending another ray out in a random
+		direction, tracing it to its next intersection with geometry, and finding the light out from that surface
+		through recursively calling the rendering equation again.
+		<br><br>
+		Implementation-wise, I started with an “radiance from at least one bounce” function, which runs the direct
+		lighting algorithm for the bounce, as well as selecting a random uniform hemisphere direction (based on the even
+		dispersal of light from the diffuse BSDF) to trace and call the same function again to get the light from the
+		second bounce. The next sampled light then gets multiplied and normalized by the rendering equation and is added
+		to the direct lighting, which is then returned as the radiance coming from that point.
+		<br><br>
+		We can split our render under this framework further into the contributions to the radiance from a specific
+		number of bounces (i.e, after a certain number of recursive calls). Below is a few images showing those
+		contributions, per number of bounces between the light source and the camera.
+		<br><br>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 0.5em; ">
+				<tr>
+					<td>
+						<strong>Contribution from<br>N-bounce rays only</strong>
+					</td>
+					<td>
+						<strong>Cumulative contribution from<br>N-bounce or fewer rays</strong>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/globalIll/single0.png" width="300px">
+						<figcaption>Zero bounce (source only)</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/det0.png" width="300px">
+						<figcaption>Zero or fewer bounces</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/globalIll/single1.png" width="300px">
+						<figcaption>One bounce only</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/det1.png" width="300px">
+						<figcaption>One or fewer bounces</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/globalIll/single2.png" width="300px">
+						<figcaption>Two bounces only</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/det2.png" width="300px">
+						<figcaption>Two or fewer bounces</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/globalIll/single3.png" width="300px">
+						<figcaption>Three bounces only</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/det3.png" width="300px">
+						<figcaption>Three or fewer bounces</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/globalIll/single4.png" width="300px">
+						<figcaption>Four bounces only</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/det4.png" width="300px">
+						<figcaption>Four or fewer bounces</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/globalIll/single5.png" width="300px">
+						<figcaption>Five bounces only</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/det5.png" width="300px">
+						<figcaption>Five or fewer bounces</figcaption>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<br>
+		As you can see, the contributions progressively reduce. The second bounce tends to show light bouncing from
+		the places where the light landed, typically near the floor, back up towards the roof, and we observe
+		“underglow” on the bottom of objects. At this point, the roof gets lighting from light reflecting back onto it,
+		whereas from the first two bounces the roof is pitch black. The third bounce generally moves into ambient light,
+		providing light to shadows so they aren't pitch black and are more realistic. In general, raytracing as opposed
+		to rasterization allows for secondary reflections to show up in the final image. This generates ambient light
+		automatically that takes into account surrounding objects without a need for a faked “ambient light” constant.
+		<br><br>
+		We need to stop this recursion at some point. One way to do this is to call it a day once a ray has bounced some
+		constant maximum amount of times. However, this won't converge to the final image as you increase the number of
+		rays without increasing the number of bounces– we will never sample paths from the light that take more than the
+		maximum amount of bounces to reach the camera. Therefore, we can use a similar trick to Monte Carlo integration
+		and have some probability of stopping our recursion, and weight the contribution inverse proportionally to how
+		likely it was to happen. For example, if there's a flat 70% chance we continue, we weight each result by
+		\(\frac{1}{.7} \approx 1.43\) to let it proportionally represent the 30% that got terminated. This method is
+		called Russian Roulette for… obvious reasons. We also keep the maximum bounce depth just in case, but set it to
+		a high value as hopefully the contribution by that point is near zero.
+		<br><br>
+		Here's a comparison of images with direct (zero or one bounces) and indirect (more than two bounces, ended by
+		Russian Roulette) illumination separately.
+		<br><br>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 0.5em; ">
+				<tr>
+					<td>
+						<img src="images/globalIll/directBunny.png">
+						<figcaption>Bunny, direct illumination contribution<br>Notice the unnatural lack of color
+							bleeding</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/indirectBunny.png">
+						<figcaption>Bunny, indirect illumination contribution<br>Notice the lighting on the roof and
+							ambient lighting</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/globalIll/directBuilding.png">
+						<figcaption>Building, direct illumination contribution</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/indirectBuilding.png">
+						<figcaption>Building, indirect illumination contribution<br>Notice the outside gets no indirect
+							lighting,<br>but the inside has light bouncing around between struts</figcaption>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<br>
+		We can also see the effect of clamping the Russian Roulette at a certain amount of bounces. Compare the max ray
+		depths below, with 100 being a stand-in for letting Russian Roulette kill \((1-(.7)^{100}) \approx 100\%\) of
+		rays.
+		<br><br>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 0.5em; ">
+				<tr>
+					<td>
+						<img src="images/globalIll/rr0.png" width="300px">
+						<figcaption>Max ray depth of zero<br>(source only)</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/rr1.png" width="300px">
+						<figcaption>Max ray depth of one<br>(direct lighting)</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/rr2.png" width="300px">
+						<figcaption>Max ray depth of two<br>(.7 survive rate)</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/globalIll/rr3.png" width="300px">
+						<figcaption>Max ray depth of three<br>(.7 survive rate)</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/rr4.png" width="300px">
+						<figcaption>Max ray depth of four<br>(.7 survive rate)</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/rr100.png" width="300px">
+						<figcaption>Max ray depth of 100<br>(.7 survive rate)</figcaption>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<br>
+		I also rendered a banana with a different amount of rays per pixel. It gets progressively cleaner/less noisy as
+		the number of rays increases.
+		<br><br>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 0.5em; ">
+				<tr>
+					<td>
+						<img src="images/globalIll/banana1.png" width="300px">
+						<figcaption>One ray/pixel</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/banana2.png" width="300px">
+						<figcaption>Two rays/pixel</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/globalIll/banana4.png" width="300px">
+						<figcaption>Four rays/pixel</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/banana8.png" width="300px">
+						<figcaption>Eight rays/pixel</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<img src="images/globalIll/banana16.png" width="300px">
+						<figcaption>Sixteen rays/pixel</figcaption>
+					</td>
+					<td>
+						<img src="images/globalIll/banana64.png" width="300px">
+						<figcaption>Sixty-four rays/pixel</figcaption>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<figure>
+			<img src="images/globalIll/banana1024.png" width="600px">
+			<figcaption>1024 rays/pixel, thats a lot of<span style='font-family: "Press Start 2P", monospace; font-weight: 200; font-style: normal; font-size: 0.5em;'> * Potassium</span></figcaption>
+		</figure>
 
 		<!--
-		<h2>Part 4: Global Illumination</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
-		magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
-		consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
-		pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
-		laborum.
 
 		<h2>Part 5: Adaptive Sampling</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
