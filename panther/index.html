@@ -25,7 +25,23 @@
 		-->
 
 		<h2>Overview</h2>
-		WIP
+		Panther is a path tracer that implements bounding volume hierarchies, light sampling, global illumination, and
+		adaptive sampling. It uses probability extensively to make sure it converges to an accurate image as well as
+		stays feasible to compute, utilizing methods such as importance-sampled Monte Carlo integration and Russian
+		roulette.
+		<br><br>
+		Theoretically, I found the most interesting thing to be how much probability helps the render not only become
+		resource efficient, but also how it is required to make the image visually correct. The fact that a way to get
+		an unbiased estimator is to randomly sample instead of terminating after some amount of bounces surprised me,
+		and in many different areas probability is critical to render anything. The ideas of importance sampling didn't
+		seem to critical at first until I had to implement it <i>everywhere</i>. Now I see why UCSB requires computer
+		science majors to take <a href="https://catalog.ucsb.edu/courses/PSTAT%20120A">Probability and Statistics</a>;
+		it really did help with the conceptual underpinnings of this project.
+		<br><br>
+		Implementation wise, it was very satisfying to see everything being used in various ways: rays are just
+		universally helpful, the BVH sped up everything astronomically, the BSDF and sampling functions could be used in
+		different places.
+
 
 		<h2>Ray Generation and Scene Intersection (Part 1)</h2>
 		<h3>From Pixel to World: Generating Rays</h3>
