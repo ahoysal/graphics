@@ -153,7 +153,7 @@ BVH (976 million rays traced, 8 million rays/second)">
 		the sphere's origin to the intersection point (which we can find by plugging in the computed \(t\) value into
 		the original ray equation).
 
-		<h2>Part 2: Bounding Volume Hierarchy</h2>
+		<h2>Bounding Volume Hierarchy (Part 2)</h2>
 
 		A Bounding Volume Hierarchy is an acceleration structure designed to cut down on the number of intersection
 		tests needed per ray. It achieves this by creating a binary tree of progressively smaller bounding boxes around
@@ -237,7 +237,7 @@ BVH (976 million rays traced, 8 million rays/second)">
 			</table>
 		</div>
 
-		<h2>Part 3: Direct Illumination</h2>
+		<h2>Direct Illumination (Part 3)</h2>
 		<blockquote><strong>For CS184 graders!</strong> Most of this is context leading into the actual write-up
 			questions. The actual answers are under the heading “Monte Carlo (finally some fun!)".</blockquote>
 		Direct illumination is the irradiance that a pathtracer receives from a point, only based on rays that go
@@ -394,7 +394,7 @@ BVH (976 million rays traced, 8 million rays/second)">
 		</figure>
 
 
-		<h2>Part 4: Global Illumination</h2>
+		<h2>Global Illumination (Part 4)</h2>
 		<figure style="float: inline-end;">
 			<img src="images/globalIll/spheresA.png" width="200px">
 			<figcaption>Spheres with<br>global illumination!</figcaption>
@@ -624,7 +624,7 @@ BVH (976 million rays traced, 8 million rays/second)">
 					* Potassium</span></figcaption>
 		</figure>
 
-		<h2>Part 5: Adaptive Sampling</h2>
+		<h2>Adaptive Sampling (Part 5)</h2>
 		Adaptive sampling is simple at a high level; send out more rays proportionally to how different the samples are
 		from each other. We take in a constant tolerance (ex. we want the illuminance to be within 5% of the true value)
 		and for each pixel perform a basic 95% confidence interval test with the mean and variance of the illuminance of
@@ -682,52 +682,31 @@ BVH (976 million rays traced, 8 million rays/second)">
 		Both images were rendered with Russian Roulette, 100 bounces max, 1 light sample, and adaptive sampling with
 		2048 rays max, a batch size of 64 rays, and a tolerance threshold of 5%.
 
-		<!--
-		<h2 id="ec">(Optional) Part 6: Extra Credit Opportunities</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore
-		magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
-		consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
-		pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
-		laborum.
+		<h2 id="ec">Extra Credit (Part 6)</h2>
+		<h3>Memory efficient BVH</h3>
+		I implemented a more memory efficient BVH by having only one array, sorting along one axis in place using the
+		<code lang="c++">std::sort</code> function, and then passing the [start, middle) and [middle, end) iterators to
+		the children nodes of the BVH. Thus starting from the original array, they are sorted along the median pivot on
+		one axis, then within the left and right side are again split along the median along another axis. Thus the root
+		node has descendants containing indexes \([0, n/2)\) and \([n/2, n)\), the right child has descendants \([n/2,
+		3n/4)\) and \([3n/4, n)\), etc. In general, a node of depth \(d\) contains descendants \([\frac{k}{2^d},
+		\frac{k+1}{2^d})\) for some value \(k\). Since these are all contiguous in the vector and sorted in place, the
+		construction of the BVH takes up no auxiliary space. The naïve approach requires two times the persistent memory
+		to store all the new vectors, and while constructing the BVH three times the original memory due to recursively
+		cloning half the list.
 
-		<h2>Additional Notes (please remove)</h2>
+		<h2>(Un)acknowelgement of AI</h2>
+		I did not use AI for this assignment, aside from
 		<ul>
-			<li>You can also add code if you'd like as so: <code>code code code</code></li>
-			<li>If you'd like to add math equations,
-				<ul>
-					<li>You can write inline equations like so: \( a^2 + b^2 = c^2 \)</li>
-					<li>You can write display equations like so: \[ a^2 + b^2 = c^2 \]</li>
-				</ul>
+			<li>Glancing over the Google AI overview to confirm my understanding of some concepts/formulas and to find
+				actual sources with the webpages the overview links</li>
+			<li>Spellcheck and grammar by typing out the content for this write-up in a Google Doc with Grammarly
+				enabled</li>
+			<li>Double checking \(\mu = \frac{s_1}{n}\sigma^2 = \frac{1}{n-1} \cdot (s_2 - \frac{s_1^2}{n})\) given in
+				the project assignment webpage, which I'm still not conviced is right (I ended up rederiving the formula
+				for variance anyways and not using that)
 			</li>
 		</ul>
-		<p>Here is an example 2x2 gridlike structure using an HTML table. Each <b>tr</b> is a row and each <b>td</b> is
-			a column in that row. You might find this useful for framing and showing your result images in an organized
-			fashion.</p>
-		<div style="display: flex; flex-direction: column; align-items: center;">
-			<table style="width: 100%; text-align: center; border-collapse: collapse;">
-				<tr>
-					<td style="text-align: center;">
-						<img src="cornell.png" width="400px" />
-						<figcaption>Caption goes here.</figcaption>
-					</td>
-					<td style="text-align: center;">
-						<img src="cornell.png" width="400px" />
-						<figcaption>Caption goes here.</figcaption>
-					</td>
-				</tr>
-				<tr>
-					<td style="text-align: center;">
-						<img src="cornell.png" width="400px" />
-						<figcaption>Caption goes here.</figcaption>
-					</td>
-					<td style="text-align: center;">
-						<img src="cornell.png" width="400px" />
-						<figcaption>Caption goes here.</figcaption>
-					</td>
-				</tr>
-			</table>
-		</div>
-		-->
 	</div>
 
 
