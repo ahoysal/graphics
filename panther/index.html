@@ -695,6 +695,52 @@ BVH (976 million rays traced, 8 million rays/second)">
 		to store all the new vectors, and while constructing the BVH three times the original memory due to recursively
 		cloning half the list.
 
+		<h3>Halton (quasi-random) per pixel sampling</h3>
+		Halton points, as discussed <a href="../rasterization/#halton">in my rasterization write-up</a>, allows for
+		quasai-random distribution of directions in which the ray points to on the pixel. This mitigates risks of
+		sampling, by random chance, a partiuclar part of the pixel, for example most of the samples ending up on the
+		right side. Halton points guarantee that there are an equal distribution of points in every range as it goes to
+		infinity.
+		<br><br>
+		We can use the same Halton sampling within a unit square as used in the rasterization write-up to figure out
+		where within the pixel we want the ray to go through. I just replaced the grid sampler that randomly samples a
+		value from \([0,1) x [0,1)\) to Halton points generated from the coprimes 2 and 3. This provides more assurance
+		that our quasi-random samples will always represent the grid well, even at low numbers of samples. For
+		efficiency reasons, I computed the Halton points in a static lookup vector that stores all previous values, and
+		only compute new ones when the next Halton point hasn't already been computed.
+		<br>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 0.5em; ">
+				<tr>
+					<td>
+						<img src="images/lucyUniform.png" width="400px">
+						<figcaption>Lucy rendered with uniform random sampling<br>4 rays/pixel</figcaption>
+					</td>
+					<td>
+						<img src="images/lucyHalton.png" width="400px">
+						<figcaption>Lucy rendered with Halton point sampling<br>4 rays/pixel</figcaption>
+					</td>
+				</tr>
+			</table>
+			<table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 0.5em; ">
+				<tr>
+					<td>
+						<img src="images/lucyDif.png" width="400px">
+						<figcaption>Difference of the above two images</figcaption>
+					</td>
+					<td>
+						<img src="images/lucyDif2.png" width="400px">
+						<figcaption>Insert. Green is uniform random, blue is Halton points</figcaption>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<br>
+		Notice how the difference image has large differences along the edges of the statue. In those areas, you can see
+		the edge of the wing is much more well defined in the Halton point sampling image, even with only four samples
+		per pixel. This is because they are more evenly distrubuted, without being super predictable like a grid would
+		be in order to not cause common aliasing.
+
 		<h2>(Un)acknowelgement of AI</h2>
 		I did not use AI for this assignment, aside from
 		<ul>
