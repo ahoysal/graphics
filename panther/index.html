@@ -741,6 +741,43 @@ BVH (976 million rays traced, 8 million rays/second)">
 		per pixel. This is because they are more evenly distrubuted, without being super predictable like a grid would
 		be in order to not cause common aliasing.
 
+		<h3>Bilateral filtering</h3>
+		Even with adaptive sampling, we still inevitably get some noise. A bilateral blur fixes this by convolving a
+		Gaussian kernel over the image, effectively Gaussian blurring it– at least, in areas that are similar to each
+		other. Bilateral filters differ from a normal Gaussian filter by checking each pixel in the kernel's color
+		similarity to the center/original pixel's color. It then modifies the Gaussian by weighting the kernel weight by
+		the color similarity <i>per pixel convolved</i>. In effect, it creates a new kernel each time, blurring pixel
+		with the color of similar pixels around more than dissimilar ones. This blurs areas of similar color (i.e areas
+		with some noise) without blurring non-similar color (i.e different objects/surfaces that aren't noise).
+		<br><br>
+		I implemented a very simple version of this with just a straight cutoff, where only pixels within a certain
+		similarity amount would contribute to the blurring. Below are the results. Notice how edges tend to get
+		preserved (see the red walls, for example)
+		<br><br>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: separate; border-spacing: 0.5em; ">
+				<tr>
+					<td>
+						<img src="images/spheresBlur1.png" width="300px">
+						<figcaption>Spheres with no bilateral filter<br>Notice noise (zoom in) on back wall</figcaption>
+					</td>
+					<td>
+						<img src="images/spheresBlur3.png" width="300px">
+						<figcaption>Spheres with kernel size 3<br>Notice less noise (zoom in) on back
+							wall
+						</figcaption>
+					</td>
+					<td>
+						<img src="images/spheresBlur5.png" width="300px">
+						<figcaption>Spheres with kernel size 5<br>Notice even less noise (zoom in) on
+							back wall
+						</figcaption>
+					</td>
+				</tr>
+			</table>
+		</div>
+
+
 		<h2>(Un)acknowelgement of AI</h2>
 		I did not use AI for this assignment, aside from
 		<ul>
