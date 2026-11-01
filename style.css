@@ -1,60 +1,156 @@
-h1 {
-    text-align: center;
+:root {
+    --paper: rgba(255, 255, 255, 0.96);
+    --ink: #263238;
+    --muted-ink: #4b565b;
+    --link: #176b45;
+    --rule: rgba(38, 50, 56, 0.16);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    background: #eef1ed;
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    padding: 28px 20px;
+    color: var(--ink);
+    background: linear-gradient(135deg, #edf1eb, #f5f3ed);
+    font: 16px/1.75 "IBM Plex Mono", "Courier New", monospace;
 }
 
 .container {
+    width: min(100%, 980px);
     margin: 0 auto;
-    padding: 60px 20%;
+    padding: clamp(24px, 5vw, 60px);
+    overflow-wrap: anywhere;
+    background: var(--paper);
+    border: 1px solid rgba(38, 50, 56, 0.08);
+    border-radius: 12px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+}
+
+h1, h2, h3, h4 {
+    color: var(--ink);
+    font-family: "IBM Plex Mono", "Courier New", monospace;
+    line-height: 1.25;
+    letter-spacing: -0.035em;
+}
+
+h1 {
+    margin: 0 0 0.35em;
+    font-size: clamp(2rem, 5vw, 2.7rem);
+    text-align: center;
+}
+
+h2 {
+    margin: 2.2em 0 0.65em;
+    padding-top: 0.8em;
+    border-top: 1px solid var(--rule);
+    font-size: clamp(1.35rem, 3vw, 1.8rem);
+}
+
+h3 {
+    margin: 1.7em 0 0.55em;
+    font-size: clamp(1.1rem, 2.4vw, 1.35rem);
+}
+
+p, li {
+    color: var(--muted-ink);
+}
+
+a {
+    color: var(--link);
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: rgba(23, 107, 69, 0.4);
+    text-underline-offset: 0.18em;
+    transition: color 0.2s ease;
+}
+
+a:hover, a:focus-visible {
+    color: #105536;
+    text-decoration-color: currentColor;
+}
+
+.site-nav {
+    display: flex;
+    justify-content: center;
+    margin: -12px 0 36px;
+    font-size: 0.9rem;
+}
+
+.site-nav a {
+    text-decoration: none;
 }
 
 figure {
+    max-width: 100%;
+    margin: 1.5em auto;
     text-align: center;
 }
 
 img {
-    border-radius: 5%;
     display: inline-block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
 }
 
 .center {
     display: block;
-    margin-left: auto;
-    margin-right: auto;
-    width: 50%;
+    width: min(100%, 640px);
+    margin: 1.5em auto;
+}
+
+figcaption {
+    margin-top: 0.45em;
+    color: var(--muted-ink);
+    font-size: 0.9rem;
+}
+
+table {
+    max-width: 100%;
+    color: var(--muted-ink);
 }
 
 .table-text > tbody > tr > td, .table-text > tbody > tr, .table-text {
-    border: 1px solid #efe0bc;
+    border: 1px solid var(--rule);
     border-collapse: collapse;
     padding: 0.3em;
 }
 
-.table-bad {
-    background-color: #700606;
-}
+.table-bad { background-color: #f5dedd; }
+.table-ok { background-color: #f3efc9; }
+.table-mix { background-color: #f0e0f1; }
+.table-good { background-color: #e0efda; }
 
-.table-ok {
-    background-color: #949200;
-}
-
-.table-mix {
-    background-color: #850094;
-}
-
-.table-good {
-    background-color: #237505;
-}
-
-a {
-    color: #f0c561;
-}
-
-body {
-    background-color: #1d1e31;
-    color: #efe0bc;
-    font-family: "Montserrat", sans-serif;
+code {
+    padding: 0.08em 0.3em;
+    border-radius: 4px;
+    background: rgba(38, 50, 56, 0.07);
+    font-size: 0.92em;
 }
 
 footer {
+    margin: 28px auto 0;
+    color: var(--muted-ink);
+    font-size: 0.8rem;
     text-align: center;
+}
+
+@media (max-width: 640px) {
+    body { padding: 12px; font-size: 15px; }
+    .container { padding: 24px 18px; }
+    .site-nav { margin: -2px 0 28px; }
+    figure[style*="float"] { float: none !important; }
+    table { display: block; overflow-x: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
 }
