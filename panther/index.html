@@ -14,15 +14,11 @@
 	<div class="container">
 		<nav class="site-nav" aria-label="Site navigation"><a href="/">← back to root</a></nav>
 		<h1>Panther</h1>
-		<div style="text-align: center;">(CS184 Summer 2025 Homework 3 Write-Up)</div><br>
+		<div style="text-align: center;">A Pathtracer (CS184 Su25 Hw3)</div><br>
 		<div style="text-align: center;">~ Aagrim Hoysal ~</div>
 		<div style="text-align: center;">
 			<a href="https://github.com/ahoysal/cs184-panther" target="_blank">GitHub Repo</a>
 		</div>
-
-		<!--
-		We've already added one heading per part, to make your write-up as navigable when grading. Please fit your write-up within these sections!
-		-->
 
 		<figure>
 			<img src="images/adaptive/banana.png" width="90%" title="Adaptive sampling (2.5% tolerance, max 8192 rays)
@@ -95,7 +91,7 @@ BVH (976 million rays traced, 8 million rays/second)">
 		implemented triangle-ray intersections and sphere-ray intersections. Triangle ray intersections are easily found
 		by using the barycentric definition of a plane by defining all points on a plane as the weighted average of the
 		three vertices of a triangle, where all weights add up to one (see <a
-			href="https://ahoysal.github.io/cs184/rasterization/#part4">earlier explanation of barycentric
+			href="../rasterization/#barycentric-coords">earlier explanation of barycentric
 			coordinates</a>). By substituting the equation for all points on a ray (defined as \(O_{rigin} +
 		D_{irection}t\) for \(t \ge 0\)) as a point, we can solve for the ray and plane's intersection.
 		\[
@@ -238,8 +234,6 @@ BVH (976 million rays traced, 8 million rays/second)">
 		</div>
 
 		<h2>Direct Illumination (Part 3)</h2>
-		<blockquote><strong>For CS184 graders!</strong> Most of this is context leading into the actual write-up
-			questions. The actual answers are under the heading “Monte Carlo (finally some fun!)".</blockquote>
 		Direct illumination is the irradiance that a pathtracer receives from a point, only based on rays that go
 		directly to a light source or bounce off one surface and then hit a light source. As you can imagine, this is
 		simpler than considering rays that take more than one bounce, but does require thinking about how to get the
@@ -776,20 +770,6 @@ BVH (976 million rays traced, 8 million rays/second)">
 				</tr>
 			</table>
 		</div>
-
-
-		<h2>(Un)acknowelgement of AI</h2>
-		I did not use AI for this assignment, aside from
-		<ul>
-			<li>Glancing over the Google AI overview to confirm my understanding of some concepts/formulas and to find
-				actual sources with the webpages the overview links</li>
-			<li>Spellcheck and grammar by typing out the content for this write-up in a Google Doc with Grammarly
-				enabled</li>
-			<li>Double checking \(\mu = \frac{s_1}{n}\sigma^2 = \frac{1}{n-1} \cdot (s_2 - \frac{s_1^2}{n})\) given in
-				the project assignment webpage, which I'm still not conviced is right (I ended up rederiving the formula
-				for variance anyways and not using that)
-			</li>
-		</ul>
 	</div>
 
 
